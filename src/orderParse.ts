@@ -1,5 +1,5 @@
 // Order JSON 解析 — 第 11 節：4 層解析；第 5 節 Order 形狀驗證。
-import type { Order } from './types.ts'
+import type { Order, WeeklyReport } from './types.ts'
 
 export class ParseError extends Error {
   constructor(message: string) {
@@ -72,4 +72,24 @@ function isOrder(v: unknown): v is Order {
 /** 收斂到第 5 節的長度上限：steps 1–3 條。超長不截字（會斷句），只截條數。 */
 function normalize(o: Order): Order {
   return { ...o, steps: o.steps.slice(0, 3) }
+}
+
+// ── WeeklyReport（第 5 節）────────────────────────────────────────
+
+/** 與 parseOrder 同樣四層，形狀換成 WeeklyReport。 */
+export function parseWeekly(raw: string): Pick<WeeklyReport, 'body' | 'verdict'> {
+  const attempts = [
+    () => JSON.parse(raw),
+    () => JSON.parse(stripFence(raw)),
+    () => JSON.parse(firstObject(raw)),
+  ]
+  for (const attempt of attempts) {
+    try {
+      const v = attempt() as Record<string, unknown>
+      if (v && typeof v.body === 'string' && typeof v.verdict === 'string' && v.body.trim()) {
+        return { body: v.body, verdict: v.verdict }
+      }
+    } catch { /* 換下一層 */ }
+  }
+  throw new ParseError('Claude 回傳無法解析為 WeeklyReport JSON')
 }

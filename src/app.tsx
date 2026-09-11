@@ -6,9 +6,12 @@ import { Avatar } from './avatar.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
 import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
 import {
-  allEntries, dayLabel, groupByDay, makeEntry, putEntry, recentOrders, stats, timeLabel,
+  allEntries, dayLabel, entriesInWeek, getWeekly, groupByDay, makeEntry, putEntry,
+  recentOrders, saveWeekly, stats, timeLabel, weeklyDue, weekStartOf,
 } from './diary.ts'
-import type { DiaryEntry, Level, ModuleCard, ModuleId, Order } from './types.ts'
+import { requestWeekly } from './api.ts'
+import { SHARE_FALLBACK, shareNode } from './share.ts'
+import type { DiaryEntry, Level, ModuleCard, ModuleId, Order, WeeklyReport } from './types.ts'
 
 type Screen = 'home' | 'intake' | 'waiting' | 'cmd' | 'log' | 'stand' | 'error' | 'diary' | 'weekly'
 
@@ -36,11 +39,39 @@ export function App() {
   const [geoDenied, setGeoDenied] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
   const [entries, setEntries] = useState<DiaryEntry[]>([])
+  const [weekly, setWeekly] = useState<WeeklyReport | null>(null)
+  const [weeklyFailed, setWeeklyFailed] = useState(false)
   const excluded = useRef<string[]>([])
   /** 這一道口令的時間戳，換口令時沿用，讓日記只留一筆（第 10 節）。 */
   const issuedAt = useRef<string>('')
 
   useEffect(() => { void allEntries().then(setEntries) }, [])
+
+  /**
+   * 第 10 節：同一週只算一次 API。
+   * 快取有就用快取；沒有的話，只有「週日 20:00 後自動」或「使用者手動按」才會去打。
+   */
+  const loadWeekly = useCallback(async (force: boolean): Promise<void> => {
+    const weekStart = weekStartOf(new Date())
+    const cached = await getWeekly(weekStart)
+    if (cached) { setWeekly(cached); setWeeklyFailed(false); return }
+    if (!force && !weeklyDue()) return
+    try {
+      const list = await allEntries()
+      const fetched = await requestWeekly({ weekStart, level, entries: entriesInWeek(list, weekStart) })
+      // 快取鍵一律用本機算的 weekStart，不用伺服器回的，否則時區/時鐘一有落差就永遠 cache miss，
+      // 每次開 app 都會再打一次 Claude。
+      const report = { ...fetched, weekStart }
+      await saveWeekly(report)
+      setWeekly(report)
+      setWeeklyFailed(false)
+    } catch {
+      setWeeklyFailed(true) // 第 11 節：週報失敗不擋其他功能
+    }
+  }, [level])
+
+  // 開 app 時若已過本週日 20:00 且還沒產過，就自動產一次。
+  useEffect(() => { void loadWeekly(false) }, [loadWeekly])
 
   const record = useCallback(async (outcome: DiaryEntry['outcome'], o: Order | null, c: ModuleCard | null) => {
     if (!o || !c || !issuedAt.current) return
@@ -151,9 +182,17 @@ export function App() {
         {screen === 'log' && order && <LogScreen level={level} order={order} onHome={goHome} />}
         {screen === 'stand' && <Stand level={level} onDone={goHome} />}
         {screen === 'diary' && (
-          <Diary level={level} entries={entries} onBack={goHome} onWeekly={() => setScreen('weekly')} />
+          <Diary
+            level={level} entries={entries} weeklyFailed={weeklyFailed} onBack={goHome}
+            onWeekly={() => { void loadWeekly(true); setScreen('weekly') }}
+          />
         )}
-        {screen === 'weekly' && <Placeholder title="莒光園地" onBack={() => setScreen('diary')} />}
+        {screen === 'weekly' && (
+          <Weekly
+            level={level} report={weekly} failed={weeklyFailed}
+            onBack={() => setScreen('diary')} onHome={goHome}
+          />
+        )}
       </main>
       <footer>
         <span>班長有什麼了不起？— 你小學當的那個不算。</span>
@@ -354,8 +393,8 @@ const OUTCOME_LABEL: Record<DiaryEntry['outcome'], [string, string]> = {
   punished: ['罰則', 'bad'],
 }
 
-function Diary({ level, entries, onBack, onWeekly }: {
-  level: Level; entries: DiaryEntry[]; onBack: () => void; onWeekly: () => void
+function Diary({ level, entries, weeklyFailed, onBack, onWeekly }: {
+  level: Level; entries: DiaryEntry[]; weeklyFailed: boolean; onBack: () => void; onWeekly: () => void
 }) {
   const s = stats(entries)
   const days = groupByDay(entries)
@@ -392,16 +431,49 @@ function Diary({ level, entries, onBack, onWeekly }: {
           </div>
         ))}
       </div>
+      {weeklyFailed && <div className="notice" data-testid="weekly-failed">本週講評延後，班長還在寫。</div>}
       <div className="row"><button className="btn" onClick={onWeekly}>看本週莒光園地</button></div>
     </section>
   )
 }
 
-function Placeholder({ title, onBack }: { title: string; onBack: () => void }) {
+function Weekly({ level, report, failed, onBack, onHome }: {
+  level: Level; report: WeeklyReport | null; failed: boolean; onBack: () => void; onHome: () => void
+}) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [shareNote, setShareNote] = useState('')
+
+  const share = useCallback(async () => {
+    const node = cardRef.current?.querySelector('.meme') as HTMLElement | null
+    if (!node) return
+    const r = await shareNode(node, 'juguang.png')
+    if (r !== 'shared') setShareNote(SHARE_FALLBACK)
+  }, [])
+
   return (
-    <section className="screen" data-screen="placeholder">
-      <button className="back" onClick={onBack}>← 回報告</button>
-      <div className="bubble">{title}</div>
+    <section className="screen" data-screen="weekly">
+      <button className="back" onClick={onBack}>← 回日記</button>
+      <div ref={cardRef}>
+        {report ? (
+          <MemeCard
+            wide tone="ok"
+            tag={`莒光園地 · ${new Date(report.weekStart).toLocaleDateString('zh-TW')} 起 · 週日 20:00 發布`}
+            top="本週講評" bot={report.verdict} level={level} mood="idle"
+          >
+            <div className="wkbody" data-testid="weekly-body">{report.body}</div>
+          </MemeCard>
+        ) : (
+          <div className="notice" data-testid="weekly-pending">
+            {failed ? '本週講評延後，班長還在寫。' : '班長還在寫本週講評。'}
+            <small>週日 20:00 後開 app 會自動產出，也可以在日記頁手動叫。</small>
+          </div>
+        )}
+      </div>
+      {shareNote && <p className="hint" data-testid="share-note">{shareNote}</p>}
+      <div className="row">
+        {report && <button className="btn line" onClick={() => void share()}>分享週報</button>}
+        <button className="btn" onClick={onHome}>解散</button>
+      </div>
     </section>
   )
 }

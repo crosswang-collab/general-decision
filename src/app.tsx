@@ -349,14 +349,28 @@ function Cmd({ card, level, order, canReissue, geoDenied, onDone, onReissue, onS
 }
 
 function LogScreen({ level, order, onHome }: { level: Level; order: Order; onHome: () => void }) {
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [shareNote, setShareNote] = useState('')
+
+  const share = useCallback(async () => {
+    const node = cardRef.current?.querySelector('.meme') as HTMLElement | null
+    if (!node) return
+    const r = await shareNode(node, 'dengji.png')
+    if (r !== 'shared') setShareNote(SHARE_FALLBACK)
+  }, [])
+
   return (
     <section className="screen" data-screen="log">
-      <MemeCard
-        tone="ok" tag="莒光日 · 榮譽榜" top="登記" big={order.log} bot="雄壯！威武！"
-        level={level} mood="praise"
-      />
+      <div ref={cardRef}>
+        <MemeCard
+          tone="ok" tag="莒光日 · 榮譽榜" top="登記" big={order.log} bot="雄壯！威武！"
+          level={level} mood="praise"
+        />
+      </div>
+      {shareNote && <p className="hint" data-testid="share-note">{shareNote}</p>}
       <div className="row">
         <button className="btn" onClick={onHome}>解散</button>
+        <button className="btn line" onClick={() => void share()}>分享梗圖</button>
       </div>
     </section>
   )

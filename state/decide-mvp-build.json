@@ -1,0 +1,27 @@
+{
+  "loop_name": "decide-mvp-build",
+  "contract_ref": "GOAL: PWA 上線且 7 卡可走完; STOP: A∧B∧C∧D∧E; BUDGET: 5 輪/90 分",
+  "status": "running",
+  "run_id": "run-20260911-230006",
+  "budget": {
+    "rounds_used": 0,
+    "rounds_max": 5
+  },
+  "processed": [
+    "S1"
+  ],
+  "pending": [
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9",
+    "S10"
+  ],
+  "failures": [],
+  "escalation": null,
+  "last_updated": "2026-09-11T15:04:33.647Z"
+}

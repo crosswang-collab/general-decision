@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "e2e": "playwright test tests/e2e",
-    "e2e:shots": "playwright test tests/shots"
+    "e2e:shots": "playwright test tests/shots",
+    "smoke": "node scripts/smoke-order.mjs"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",

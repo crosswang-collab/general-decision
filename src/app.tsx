@@ -1,13 +1,13 @@
 // 單頁狀態機 home→intake→cmd→(log|stand)；diary；weekly（第 4 節）。
-import { useCallback, useEffect, useState } from 'react'
-import { CARD_BY_ID, CARDS, MAJOR_IDS, MINOR_IDS, MODULE_BARKS } from './cards.ts'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { CARD_BY_ID, MAJOR_IDS, MINOR_IDS, MODULE_BARKS } from './cards.ts'
 import { OFFICER_BY_LEVEL } from './officers.ts'
 import { Avatar } from './avatar.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
-import { MOCK_ORDERS, MOCK_REISSUE } from './mockOrders.ts'
+import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
 import type { Level, ModuleCard, ModuleId, Order } from './types.ts'
 
-type Screen = 'home' | 'intake' | 'cmd' | 'log' | 'stand' | 'diary' | 'weekly'
+type Screen = 'home' | 'intake' | 'waiting' | 'cmd' | 'log' | 'stand' | 'error' | 'diary' | 'weekly'
 
 const LEVEL_KEY = 'decide.level'
 
@@ -30,7 +30,9 @@ export function App() {
   const [choices, setChoices] = useState<Record<string, string | number>>({})
   const [order, setOrder] = useState<Order | null>(null)
   const [reissued, setReissued] = useState(false)
-
+  const [geoDenied, setGeoDenied] = useState(false)
+  const [error, setError] = useState<ApiError | null>(null)
+  const excluded = useRef<string[]>([])
 
   useEffect(() => {
     try { localStorage.setItem(LEVEL_KEY, String(level)) } catch { /* 忽略 */ }
@@ -44,20 +46,52 @@ export function App() {
     setChoices(Object.fromEntries(c.intake.map((f) => [f.key, f.default])))
     setOrder(null)
     setReissued(false)
+    setGeoDenied(false)
+    setError(null)
+    excluded.current = []
     setScreen('intake')
   }, [])
 
-  const submit = useCallback(() => {
-    if (!card) return
-    setOrder(MOCK_ORDERS[card.id])
-    setScreen('cmd')
-  }, [card])
+  const fetchOrder = useCallback(async (c: ModuleCard, ch: Record<string, string | number>) => {
+    setScreen('waiting')
+    setError(null)
+
+    // 第 8 節：需要 Places 且今天還沒超過上限，才去要定位。
+    let loc: { lat: number; lng: number } | undefined
+    if (c.needsPlaces && underPlacesCap()) {
+      const geo = await getLocation()
+      loc = geo.loc
+      setGeoDenied(geo.denied)
+    } else {
+      setGeoDenied(false)
+    }
+
+    try {
+      const o = await requestOrder({
+        module: c.id,
+        level,
+        choices: ch,
+        loc,
+        now: new Date().toISOString(),
+        exclude: excluded.current.length ? [...excluded.current] : undefined,
+        recentOrders: [],
+      })
+      setOrder(o)
+      setScreen('cmd')
+    } catch (e) {
+      setError(e instanceof ApiError ? e : new ApiError('upstream', ERROR_TEXT.upstream.line))
+      setScreen('error')
+    }
+  }, [level])
+
+  const submit = useCallback(() => { if (card) void fetchOrder(card, choices) }, [card, choices, fetchOrder])
 
   const reissue = useCallback(() => {
-    if (!card) return
-    setOrder(MOCK_REISSUE[card.id] ?? MOCK_ORDERS[card.id])
-    setReissued(true)
-  }, [card])
+    if (!card || reissued) return
+    if (order?.place?.id) excluded.current.push(order.place.id)
+    setReissued(true) // 第 10 節：一次口令最多換 1 次
+    void fetchOrder(card, choices)
+  }, [card, choices, fetchOrder, order, reissued])
 
   const goHome = useCallback(() => setScreen('home'), [])
 
@@ -74,9 +108,14 @@ export function App() {
             onBack={goHome} onSubmit={submit}
           />
         )}
+        {screen === 'waiting' && <Waiting level={level} />}
+        {screen === 'error' && error && (
+          <ErrorScreen level={level} error={error} onRetry={submit} onHome={goHome} onDiary={() => setScreen('diary')} />
+        )}
         {screen === 'cmd' && card && order && (
           <Cmd
-            card={card} level={level} order={order} canReissue={!reissued && !!card.reissueLabel}
+            card={card} level={level} order={order} geoDenied={geoDenied}
+            canReissue={!reissued && !!card.reissueLabel}
             onDone={() => setScreen('log')} onReissue={reissue} onSkip={() => setScreen('stand')}
           />
         )}
@@ -184,12 +223,45 @@ function Intake({ card, level, choices, onChange, onBack, onSubmit }: {
   )
 }
 
-function Cmd({ card, level, order, canReissue, onDone, onReissue, onSkip }: {
-  card: ModuleCard; level: Level; order: Order; canReissue: boolean
+function Waiting({ level }: { level: Level }) {
+  return (
+    <section className="screen" data-screen="waiting">
+      <OfficerPlate level={level} mood="bark" />
+      <div className="waiting">
+        <div className="dots" data-testid="waiting">班長在想……</div>
+        <div className="hint">一個口令一個動作。等著。</div>
+      </div>
+    </section>
+  )
+}
+
+function ErrorScreen({ level, error, onRetry, onHome, onDiary }: {
+  level: Level; error: ApiError; onRetry: () => void; onHome: () => void; onDiary: () => void
+}) {
+  const t = ERROR_TEXT[error.kind]
+  return (
+    <section className="screen" data-screen="error">
+      <button className="back" onClick={onHome}>← 回報告</button>
+      <OfficerPlate level={level} mood="bark" />
+      <div className="notice" data-testid="error-line">
+        {t.line}
+        {t.sub && <small>{t.sub}</small>}
+      </div>
+      <div className="row">
+        <button className="btn" data-testid="retry" onClick={onRetry}>再報告一次</button>
+        <button className="btn line" onClick={onDiary}>看日記</button>
+      </div>
+    </section>
+  )
+}
+
+function Cmd({ card, level, order, canReissue, geoDenied, onDone, onReissue, onSkip }: {
+  card: ModuleCard; level: Level; order: Order; canReissue: boolean; geoDenied: boolean
   onDone: () => void; onReissue: () => void; onSkip: () => void
 }) {
   return (
     <section className="screen" data-screen="cmd">
+      {geoDenied && <div className="notice" data-testid="geo-denied">{GEO_DENIED_LINE}</div>}
       <MemeCard
         tone={order.verdict === 'stop' ? 'red' : 'olive'}
         tag="決斷連 · 一個口令一個動作"
@@ -223,15 +295,17 @@ function LogScreen({ level, order, onHome }: { level: Level; order: Order; onHom
 function Stand({ level, onDone }: { level: Level; onDone: () => void }) {
   const p = OFFICER_BY_LEVEL[level].punishment
   const [n, setN] = useState(p.count)
+  const done = useRef(onDone)
+  done.current = onDone
   useEffect(() => {
     const t = setInterval(() => {
       setN((v) => {
-        if (v <= 1) { clearInterval(t); onDone(); return 0 }
+        if (v <= 1) { clearInterval(t); done.current(); return 0 }
         return v - 1
       })
     }, p.stepMs)
     return () => clearInterval(t)
-  }, [p.stepMs, onDone])
+  }, [p.stepMs])
   return (
     <section className="screen" data-screen="stand">
       <MemeCard
@@ -251,5 +325,3 @@ function Placeholder({ title, onBack }: { title: string; onBack: () => void }) {
     </section>
   )
 }
-
-export const ALL_CARD_IDS = CARDS.map((c) => c.id)

@@ -5,7 +5,10 @@ import { OFFICER_BY_LEVEL } from './officers.ts'
 import { Avatar } from './avatar.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
 import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
-import type { Level, ModuleCard, ModuleId, Order } from './types.ts'
+import {
+  allEntries, dayLabel, groupByDay, makeEntry, putEntry, recentOrders, stats, timeLabel,
+} from './diary.ts'
+import type { DiaryEntry, Level, ModuleCard, ModuleId, Order } from './types.ts'
 
 type Screen = 'home' | 'intake' | 'waiting' | 'cmd' | 'log' | 'stand' | 'error' | 'diary' | 'weekly'
 
@@ -32,7 +35,20 @@ export function App() {
   const [reissued, setReissued] = useState(false)
   const [geoDenied, setGeoDenied] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
+  const [entries, setEntries] = useState<DiaryEntry[]>([])
   const excluded = useRef<string[]>([])
+  /** 這一道口令的時間戳，換口令時沿用，讓日記只留一筆（第 10 節）。 */
+  const issuedAt = useRef<string>('')
+
+  useEffect(() => { void allEntries().then(setEntries) }, [])
+
+  const record = useCallback(async (outcome: DiaryEntry['outcome'], o: Order | null, c: ModuleCard | null) => {
+    if (!o || !c || !issuedAt.current) return
+    const list = await putEntry(
+      makeEntry(issuedAt.current, c.id, level, o.meme.big, outcome, o.place?.name),
+    )
+    setEntries([...list].sort((a, b) => b.ts.localeCompare(a.ts)))
+  }, [level])
 
   useEffect(() => {
     try { localStorage.setItem(LEVEL_KEY, String(level)) } catch { /* 忽略 */ }
@@ -49,6 +65,7 @@ export function App() {
     setGeoDenied(false)
     setError(null)
     excluded.current = []
+    issuedAt.current = ''
     setScreen('intake')
   }, [])
 
@@ -74,15 +91,16 @@ export function App() {
         loc,
         now: new Date().toISOString(),
         exclude: excluded.current.length ? [...excluded.current] : undefined,
-        recentOrders: [],
+        recentOrders: recentOrders(entries),
       })
+      if (!issuedAt.current) issuedAt.current = new Date().toISOString()
       setOrder(o)
       setScreen('cmd')
     } catch (e) {
       setError(e instanceof ApiError ? e : new ApiError('upstream', ERROR_TEXT.upstream.line))
       setScreen('error')
     }
-  }, [level])
+  }, [level, entries])
 
   const submit = useCallback(() => { if (card) void fetchOrder(card, choices) }, [card, choices, fetchOrder])
 
@@ -90,8 +108,19 @@ export function App() {
     if (!card || reissued) return
     if (order?.place?.id) excluded.current.push(order.place.id)
     setReissued(true) // 第 10 節：一次口令最多換 1 次
+    void record('reissued', order, card)
     void fetchOrder(card, choices)
-  }, [card, choices, fetchOrder, order, reissued])
+  }, [card, choices, fetchOrder, order, record, reissued])
+
+  const done = useCallback(() => {
+    void record('done', order, card)
+    setScreen('log')
+  }, [card, order, record])
+
+  const skip = useCallback(() => {
+    void record('punished', order, card)
+    setScreen('stand')
+  }, [card, order, record])
 
   const goHome = useCallback(() => setScreen('home'), [])
 
@@ -116,13 +145,15 @@ export function App() {
           <Cmd
             card={card} level={level} order={order} geoDenied={geoDenied}
             canReissue={!reissued && !!card.reissueLabel}
-            onDone={() => setScreen('log')} onReissue={reissue} onSkip={() => setScreen('stand')}
+            onDone={done} onReissue={reissue} onSkip={skip}
           />
         )}
         {screen === 'log' && order && <LogScreen level={level} order={order} onHome={goHome} />}
         {screen === 'stand' && <Stand level={level} onDone={goHome} />}
-        {screen === 'diary' && <Placeholder title="新兵日記" onBack={goHome} />}
-        {screen === 'weekly' && <Placeholder title="莒光園地" onBack={goHome} />}
+        {screen === 'diary' && (
+          <Diary level={level} entries={entries} onBack={goHome} onWeekly={() => setScreen('weekly')} />
+        )}
+        {screen === 'weekly' && <Placeholder title="莒光園地" onBack={() => setScreen('diary')} />}
       </main>
       <footer>
         <span>班長有什麼了不起？— 你小學當的那個不算。</span>
@@ -313,6 +344,55 @@ function Stand({ level, onDone }: { level: Level; onDone: () => void }) {
         top={`${p.action}，${p.countLabel}！數給我聽！`} number={n} bot={p.line}
         level={level} mood="punish"
       />
+    </section>
+  )
+}
+
+const OUTCOME_LABEL: Record<DiaryEntry['outcome'], [string, string]> = {
+  done: ['完成', 'ok'],
+  reissued: ['換口令', 're'],
+  punished: ['罰則', 'bad'],
+}
+
+function Diary({ level, entries, onBack, onWeekly }: {
+  level: Level; entries: DiaryEntry[]; onBack: () => void; onWeekly: () => void
+}) {
+  const s = stats(entries)
+  const days = groupByDay(entries)
+  return (
+    <section className="screen" data-screen="diary">
+      <button className="back" onClick={onBack}>← 回報告</button>
+      <div className="officer">
+        <Avatar className="av" level={level} mood="idle" />
+        <div className="plate">
+          <span className="rank">新兵日記</span>
+          <div className="name">{entries.length ? dayLabel(entries.at(-1)!.ts) + ' 起' : '還沒有紀錄'}</div>
+          <div className="meta">每一道口令自動登記。不用寫，班長替你寫。</div>
+        </div>
+      </div>
+      <div className="stats" data-testid="stats">
+        <div className="stat"><b data-testid="stat-orders">{s.orders}</b><span>道口令</span></div>
+        <div className="stat"><b data-testid="stat-rate">{s.complianceRate}%</b><span>服從率</span></div>
+        <div className="stat"><b data-testid="stat-punish">{s.punishments}</b><span>次罰則</span></div>
+      </div>
+      <div data-testid="days">
+        {days.length === 0 && (
+          <p className="empty">還沒有紀錄。去按一顆鍵，班長會替你寫第一筆。</p>
+        )}
+        {days.map((d) => (
+          <div className="day" key={d.label}>
+            <h4>{d.label}</h4>
+            {d.entries.map((e) => (
+              <div className="ent" key={e.id} data-testid="entry">
+                <time>{timeLabel(e.ts)}</time>
+                <span className="o">{CARD_BY_ID[e.module].title} · {e.placeName ?? e.big}</span>
+                <span className={`r ${OUTCOME_LABEL[e.outcome][1]}`}>{OUTCOME_LABEL[e.outcome][0]}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+      <div className="row"><button className="btn" onClick={onWeekly}>看本週莒光園地</button></div>
     </section>
   )
 }

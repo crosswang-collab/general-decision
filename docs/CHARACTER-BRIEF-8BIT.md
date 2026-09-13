@@ -29,6 +29,20 @@ node design/8bit/normalize.mjs ~/Downloads/heimian-bark.png 1
 
 **還有一條路你可以先考慮：** repo 裡 `design/sprites.mjs` 已經有一套程式產生的 sprite，三人 × 五表情全部齊了，一致性是結構保證的。如果你只是覺得它「不夠好看」而不是「方向錯了」，把它拿去 ChatGPT 說「照這個格線畫得更精緻」，比從零生成更容易收斂。參考圖都在 `design/8bit/ref/`。
 
+### 為什麼是硬體調色盤
+
+自己挑的顏色再怎麼限制色數，玩過那兩台的人一眼就知道不對。
+
+原本那組品牌色（卡其 `#F0E4C6`、草綠 `#587631`）**兩台機器都畫不出來**。
+而且不能盲目吸附 —— 草綠每通道取最近階，在 SMS 上會變成 `#555555` 純灰，
+在 NES 上變 `#787878`，軍綠的身分整個消失。所以是從硬體調色盤裡**挑一格**，
+標準是保住色相身分，不是數值最接近。
+
+**Sega Master System 的版本也做了**，在畫布的「調色盤」畫板上可以對照。
+誠實講：到這個色數，兩者差異很小 —— SMS 的優勢（15 色/sprite vs NES 的 3 色）
+要做多階陰影才顯得出來。這份簡報走 NES，因為它的 3 色紀律逼你把辨識度做在
+形狀上，而形狀正是這個案子最難的一關。
+
 ---
 
 ## 1. 要上傳給 ChatGPT 的檔案
@@ -57,8 +71,14 @@ HARD TECHNICAL CONSTRAINTS
 - Deliver at 1024×1024 (each logical pixel = a crisp 21×21 block of one flat color),
   so the image can be downsampled to 48×48 with nearest-neighbour and lose nothing.
 - Transparent background. No frame, no border, no drop shadow, no text, no watermark.
-- Limited palette: use ONLY the hex values given per character. No other colors,
-  no tints, no shades, no blends between them.
+- HARDWARE PALETTE: every color must come from the Nintendo Famicom/NES master
+  palette. Use ONLY the hex values listed below. No other colors, no tints, no
+  shades, no blends. The NES could only display 54 colors and a sprite could only
+  use 3 of them plus transparency — that constraint is what makes it read as a
+  real 1980s console game rather than "pixel-art-style" illustration.
+- The three characters SHARE ONE SKIN TONE. They are told apart by UNIFORM
+  BRIGHTNESS, not by skin. This is palette swap — the standard way 8-bit games
+  distinguished characters of the same type.
 - Every shape has a 1-pixel dark outline in #16180F.
 
 SUBJECT
@@ -112,10 +132,11 @@ CHARACTER: A-Liang, rookie sergeant, early 20s. He cannot manage to be scary.
 - Shoulders: NARROW and sloped.
 - No sash. No whistle.
 
-PALETTE — use only these:
-  outline #16180F · skin #F0C49C · skin shadow #C99366
-  uniform #6E8A3E · uniform shadow #4A5F28 · sweat #2F7FB5
-  gold #F5B21A · white #F2EEDF
+PALETTE (Nintendo FC/NES hardware colors) — use only these:
+  outline #000000 · skin #FCA044 · skin shadow #AC7C00
+  uniform #B8F818 (brightest of the three — he has no authority yet)
+  uniform shadow #00A800 · sweat #3CBCFC
+  gold #F8B800 · white #FCFCFC
 ```
 
 ### 黑面 · 值星班長（lv1）
@@ -135,10 +156,10 @@ CHARACTER: Hei-Mian, duty sergeant, around 30. The standard-issue drill sergeant
 - Shoulders: the BROADEST of the three.
 - No whistle. No sweat.
 
-PALETTE — use only these:
-  outline #16180F · skin #D9A06B · skin shadow #A8703F
-  uniform #587631 · uniform shadow #3D5320 · sash #D93223
-  gold #F5B21A · white #F2EEDF
+PALETTE (Nintendo FC/NES hardware colors) — use only these:
+  outline #000000 · skin #FCA044 · skin shadow #AC7C00
+  uniform #00A800 (mid — the standard) · uniform shadow #005800
+  sash #F83800 · gold #F8B800 · white #FCFCFC
 ```
 
 ### 老郭 · 士官長（lv2）
@@ -161,10 +182,10 @@ CHARACTER: Lao-Guo, sergeant major, late 40s. Sharp-tongued, seen it all.
 - Shoulders: medium width.
 - No sash. No sweat.
 
-PALETTE — use only these:
-  outline #16180F · skin #C18A5A · skin shadow #8F5F33
-  uniform #3D5320 · uniform shadow #2A3A16 · white hair #E8E4D6
-  gold #F5B21A · white #F2EEDF
+PALETTE (Nintendo FC/NES hardware colors) — use only these:
+  outline #000000 · skin #FCA044 · skin shadow #AC7C00
+  uniform #005800 (darkest — highest air pressure) · uniform shadow #000000
+  white hair #F8F8F8 · gold #F8B800 · white #FCFCFC
 ```
 
 ---
@@ -215,6 +236,8 @@ public/officers/0/soft.webp    public/officers/1/soft.webp    public/officers/2/
 **格線**
 - [ ] 縮到 48×48 之後，每一格是一個純色方塊，沒有半透明、沒有漸層
 - [ ] 顏色數 ≤ 8，而且全部落在該角色的調色盤上
+- [ ] **每一個顏色都是任天堂 FC/NES 主調色盤裡的值**（不是自己調的近似色）
+- [ ] 三人膚色完全相同（用制服亮度區分，不是膚色）
 - [ ] 完全透明背景，邊緣沒有白邊或灰邊
 
 **造型**

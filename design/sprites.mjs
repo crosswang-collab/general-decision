@@ -298,8 +298,8 @@ function drawExtras(b, lv, P, mood) {
 export const MOODS = ['idle', 'bark', 'praise', 'punish', 'soft']
 
 /** 回傳 48×48 的顏色矩陣（null = 透明）。 */
-export function spriteGrid(lv, mood = 'idle') {
-  const P = PALETTES[lv]
+export function spriteGrid(lv, mood = 'idle', palettes = PALETTES) {
+  const P = palettes[lv]
   const b = blank()
 
   drawBody(b, lv, P)
@@ -319,8 +319,8 @@ export function spriteGrid(lv, mood = 'idle') {
 }
 
 /** 轉成 SVG（同列同色的像素合併成一個 rect，檔案小很多）。 */
-export function spriteSvg(lv, mood = 'idle', { scale = 1, bg = null } = {}) {
-  const g = spriteGrid(lv, mood)
+export function spriteSvg(lv, mood = 'idle', { scale = 1, bg = null, palettes = PALETTES } = {}) {
+  const g = spriteGrid(lv, mood, palettes)
   const parts = []
   if (bg) parts.push(`<rect width="${G.SIZE}" height="${G.SIZE}" fill="${bg}"/>`)
   for (let y = 0; y < G.SIZE; y++) {

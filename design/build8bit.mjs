@@ -1,9 +1,14 @@
 // 8-bit 方向的 Claude Design 畫布工作檔。
 import { writeFileSync } from 'node:fs'
 import { spriteSvg, silhouetteSvg, MOODS } from './sprites.mjs'
+import { hwPalettes, HW } from './hwpalette.mjs'
 
-const T = { khaki:'#F0E4C6', ink:'#16180F', olive:'#587631', olive2:'#3D5320',
-            signal:'#D93223', gold:'#F5B21A', pop:'#2F7FB5', white:'#F2EEDF', mute:'#7A7A64' }
+// 預設走任天堂 FC/NES 的硬體調色盤。SMS 版在「調色盤」畫板上對照。
+const PAL = hwPalettes('nes')
+
+const H = HW.nes
+const T = { khaki:H.page, ink:H.ink, olive:H.unis[1].uni, olive2:H.unis[1].dark,
+            signal:H.signal, gold:H.gold, pop:H.accents[0], white:H.white, mute:'#7C7C7C' }
 const FONT = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&amp;family=Noto+Sans+TC:wght@400;700;900&amp;display=swap">'
 const CSS = `
   body{margin:0;font-family:"Noto Sans TC",-apple-system,"PingFang TC",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
@@ -38,7 +43,7 @@ writeFileSync('8bit/Main.dc.html', wrap(`<div class="phone">
     <button style="font:inherit;font-size:12px;font-weight:700;border:3px solid ${T.ink};background:${T.white};color:${T.ink};padding:6px 10px;cursor:pointer">新兵日記</button>
   </div>
   <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:12px">
-    <div class="box" style="padding:0;box-shadow:4px 4px 0 ${T.ink}">${spriteSvg(1,'idle',{scale:2,bg:T.khaki})}</div>
+    <div class="box" style="padding:0;box-shadow:4px 4px 0 ${T.ink}">${spriteSvg(1,'idle',{scale:2,bg:T.khaki,palettes:PAL})}</div>
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
       <span class="px" style="font-size:8px;color:${T.khaki};background:${T.ink};padding:4px 6px;align-self:flex-start">LV.2  值星班長</span>
       <div style="font-size:26px;font-weight:900;line-height:1">黑面</div>
@@ -70,7 +75,7 @@ writeFileSync('8bit/Cmd.dc.html', wrap(`<div class="phone">
       <div style="font-size:34px;font-weight:900;line-height:1.1;color:${T.white};text-shadow:3px 3px 0 ${T.ink};overflow-wrap:anywhere">阿財<br>魯肉飯</div>
       <div style="font-size:13px;font-weight:700;color:${T.gold};text-shadow:2px 2px 0 ${T.ink}">超商吃兩天了</div>
     </div>
-    <div style="align-self:end">${spriteSvg(1,'bark',{scale:3})}</div>
+    <div style="align-self:end">${spriteSvg(1,'bark',{scale:3,palettes:PAL})}</div>
     <span style="position:absolute;left:0;right:0;bottom:0;height:6px;background:repeating-linear-gradient(90deg,${T.gold} 0 8px,${T.ink} 8px 16px)"></span>
   </div>
   <div class="box" style="margin-top:14px;padding:12px 14px;font-size:16px;line-height:1.6;display:flex;flex-direction:column;gap:4px">
@@ -98,7 +103,7 @@ writeFileSync('8bit/Stand.dc.html', wrap(`<div class="phone">
       </div>
       <div style="font-size:12px;font-weight:700;color:${T.white};text-shadow:2px 2px 0 ${T.ink}">軍中沒有下次注意，只有這一次。</div>
     </div>
-    <div style="align-self:end">${spriteSvg(1,'punish',{scale:3})}</div>
+    <div style="align-self:end">${spriteSvg(1,'punish',{scale:3,palettes:PAL})}</div>
   </div>
   <p class="px" style="text-align:center;font-size:8px;color:${T.mute};margin-top:16px;line-height:1.8">數到 0 自動解散<br>中途離開不算</p>
   <div style="flex:1"></div>
@@ -114,7 +119,7 @@ writeFileSync('8bit/Sprites.dc.html', wrap(`<div style="padding:28px;background:
   <div style="display:grid;grid-template-columns:74px repeat(5,1fr);gap:8px;align-items:center;margin-top:14px">
     <span></span>${MOODS.map(m=>`<span class="px" style="font-size:8px;color:${T.mute};text-align:center">${m}</span>`).join('')}
     ${[0,1,2].map(lv=>`<span style="font-size:12px;font-weight:700">${NAMES[lv]}</span>`+
-      MOODS.map(m=>`<div style="border:2px solid ${T.ink};background:${T.white};justify-self:center">${spriteSvg(lv,m,{scale:2})}</div>`).join('')).join('')}
+      MOODS.map(m=>`<div style="border:2px solid ${T.ink};background:${T.white};justify-self:center">${spriteSvg(lv,m,{scale:2,palettes:PAL})}</div>`).join('')).join('')}
   </div>
   <div style="display:flex;gap:32px;margin-top:22px;align-items:flex-end">
     <div>
@@ -126,11 +131,34 @@ writeFileSync('8bit/Sprites.dc.html', wrap(`<div style="padding:28px;background:
     <div>
       <div style="font-size:12px;font-weight:700;margin-bottom:6px">實際尺寸</div>
       <div style="display:flex;gap:12px;align-items:flex-end">
-        ${[1,2,3].map(s=>`<div style="border:2px solid ${T.ink}">${spriteSvg(1,'bark',{scale:s,bg:T.white})}</div>`).join('')}
+        ${[1,2,3].map(s=>`<div style="border:2px solid ${T.ink}">${spriteSvg(1,'bark',{scale:s,bg:T.white,palettes:PAL})}</div>`).join('')}
       </div>
     </div>
   </div>
 </div>`, 900, 640))
+
+// ── 05 調色盤對照 ──
+const PNAME=['阿良','黑面','老郭']
+writeFileSync('8bit/Palette.dc.html', wrap(`<div style="padding:26px;background:#DDD8C6;color:#16180F;box-sizing:border-box;width:900px;height:560px;font-family:system-ui">
+  <div style="font-size:19px;font-weight:900;margin-bottom:2px">硬體調色盤對照</div>
+  <div style="font-size:11px;color:#666;margin-bottom:18px">同一組 sprite，只換顏色。到這個色數兩者差異很小 —— SMS 的 15 色/sprite 要做多階陰影才顯得出來。</div>
+  <div style="display:flex;gap:30px;align-items:flex-start">
+  ${['nes','sms'].map(mode=>{const pal=hwPalettes(mode);const hw=HW[mode];const P1=pal[1];
+    return `<div><div style="font-size:14px;font-weight:700">${hw.label}</div>
+      <div style="font-size:10px;font-family:monospace;color:#777;margin:2px 0 10px">${mode==='nes'?'54 色主調色盤 · 3 色/sprite':'64 色（RGB 2-2-2）· 15 色/sprite'}</div>
+      ${[0,1,2].map(lv=>`<div style="display:flex;gap:6px;margin-bottom:6px;align-items:center">
+        <span style="font-size:11px;width:28px;color:#555">${PNAME[lv]}</span>
+        ${['idle','bark','punish'].map(m=>`<div style="border:2px solid #16180F">${spriteSvg(lv,m,{scale:3,bg:hw.page,palettes:pal})}</div>`).join('')}
+      </div>`).join('')}
+      <div style="display:flex;gap:3px;margin-top:10px">${[P1.skin,P1.skinDark,P1.uni,P1.uniDark,P1.accent,P1.gold].map(c=>`<span style="width:24px;height:24px;background:${c};border:1px solid #16180F"></span>`).join('')}</div>
+      <div style="font:10px monospace;color:#777;margin-top:6px">${[P1.skin,P1.uni,P1.accent].join('  ')}</div>
+    </div>`}).join('')}
+  </div>
+  <div style="margin-top:18px;font-size:11px;color:#666;line-height:1.7">
+    三人膚色<b>共用</b>，改用制服亮度區分 —— 這是 8-bit 區分同類角色的標準技法（palette swap），<br>
+    也剛好就是三段火力：制服由亮到暗，氣壓由低到高。
+  </div>
+</div>`, 900, 560))
 
 const P={w:390,h:844}
 writeFileSync('8bit/canvas.json', JSON.stringify({
@@ -139,12 +167,13 @@ writeFileSync('8bit/canvas.json', JSON.stringify({
     {file:'Cmd.dc.html',title:'02 命令卡',x:480,y:0,...P},
     {file:'Stand.dc.html',title:'03 罰則倒數',x:960,y:0,...P},
     {file:'Sprites.dc.html',title:'sprite 表 + 剪影測試',x:1440,y:0,w:900,h:640},
+    {file:'Palette.dc.html',title:'調色盤：NES vs SMS',x:1440,y:760,w:900,h:560},
   ],
   annotations:[
     {id:'note-dir',x:0,y:-190,w:440,text:'方向 C · 8-bit · 玩具電玩感\n48×48 sprite，三人共用格線（眼線 Y24、肩線 Y38 鎖死）。\n表情只換眉與嘴 —— 改表情是改一個函式，不重畫任何像素。'},
     {id:'note-ui',x:960,y:-190,w:440,text:'UI 走「混合」：角色、梗圖卡、按鈕是 8-bit（厚描邊、硬陰影、無圓角）；\n步驟卡的文字保持可讀 —— 那是真的要你照做的指令，不能為了風格犧牲。'},
     {id:'note-gate',x:2400,y:0,w:300,text:'第一道閘門\n\n黑剪影 48px 並排分不分得出來？\n阿良＝歪帽＋後腦翹髮\n黑面＝最寬最方＋值星帶抬肩\n老郭＝帽低＋鬢角白髮\n\n這關過不了整個方向作廢。'},
-    {id:'note-todo',x:2400,y:280,w:300,text:'還沒做的\n\n・帽徽現在是金環，不是五角星（五角星是解放軍系統，舊版畫錯了）\n・值星帶方向需要一張參考照定死\n・繁中像素字（Cubic 11 / Zpix）還沒接\n・音效、日記、週報畫面'},
+    {id:'note-todo',x:2400,y:280,w:300,text:'還沒做的\n\n・調色盤已吸附到任天堂 FC/NES 硬體色（SMS 版見對照畫板）\n・帽徽是金環不是五角星（五角星是解放軍系統）\n・值星帶方向需要一張參考照定死\n・繁中像素字（Cubic 11 / Zpix）還沒接\n・音效、日記、週報畫面'},
   ],
   launch:{view:'canvas'},
 }, null, 2) + '\n')

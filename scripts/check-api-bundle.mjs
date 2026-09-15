@@ -10,10 +10,11 @@
  * 這支腳本只信 vercel.json 承諾會打包的東西：照 functions[].includeFiles 複製檔案，
  * 其餘一律不給。少一個檔就紅燈。
  *
- * 載入成功還不夠。Vercel 的 Node runtime 只認具名 HTTP method export；把
- * export default 當成舊式 (req, res) => void，回傳的 Response 會被直接忽略，
- * 請求永遠掛住（狀態碼 0，不是 500，所以連 error log 都不會有）。所以這支也
- * 斷言 GET / POST 具名 export 存在，並走那條路徑驗回應。
+ * 載入成功還不夠。Vercel 的 Node runtime 只要看到函式型的 export default 就走舊式
+ * (req, res) => void：回傳的 Response 被直接丟棄、請求永遠掛住（狀態碼 0，不是 500，
+ * 所以連 error log 都不會有），而且此時具名 export 完全不被理會——這點在正式站實測
+ * 過，不是推測。所以這支斷言 default 必須是 { fetch }、不能是函式，並把具名 GET/POST
+ * 與 default.fetch 兩條入口都走一次。
  *
  *   node scripts/check-api-bundle.mjs
  */
@@ -74,18 +75,25 @@ try {
       fail(`api/${name} 載不起來：${e.code ?? ''} ${String(e.message).split('\n')[0]}`)
       continue
     }
-    if (typeof mod.default !== 'function') { fail(`api/${name} 沒有 export default handler（本機 api shim 要用）`); continue }
+    // 正式站實測過的病灶：只要 export default 是函式，Vercel 就走舊式 (req, res) => void，
+    // 回傳的 Response 被丟棄、請求永遠掛住，而且具名 export 完全不被理會。
+    if (typeof mod.default === 'function') {
+      fail(`api/${name} 的 export default 是函式，Vercel 會當成舊式 (req, res) 並丟棄回傳值`)
+      continue
+    }
+    if (typeof mod.default?.fetch !== 'function') { fail(`api/${name} 缺 export default { fetch }`); continue }
 
-    // Vercel 只認具名 HTTP method export。缺了的話 default export 會被當成舊式
-    // (req, res) => void，回傳的 Response 直接被忽略，請求永遠掛住。
     const missing = ['GET', 'POST'].filter((m) => typeof mod[m] !== 'function')
-    if (missing.length) { fail(`api/${name} 缺具名 export：${missing.join('、')}，Vercel 會忽略回傳值`); continue }
+    if (missing.length) { fail(`api/${name} 缺具名 export：${missing.join('、')}`); continue }
 
-    // GET 應該回 405（第 4 節：只收 POST）。走 Vercel 實際會用的入口，不是 default。
-    const res = await mod.GET(new Request(`https://example.com/api/${name}`, { method: 'GET' }))
-    if (!(res instanceof Response)) { fail(`api/${name} 的 GET 沒有回 Response`); continue }
-    if (res.status !== 405) fail(`api/${name} 的 GET 回 ${res.status}，預期 405`)
-    else pass(`api/${name} 載入成功，具名 GET/POST 齊全，GET → 405`)
+    // GET 應該回 405（第 4 節：只收 POST）。Vercel 兩種入口都可能被選中，兩種都驗。
+    let ok = true
+    for (const [label, fn] of [['具名 GET', mod.GET], ['default.fetch', mod.default.fetch]]) {
+      const res = await fn(new Request(`https://example.com/api/${name}`, { method: 'GET' }))
+      if (!(res instanceof Response)) { fail(`api/${name} 的 ${label} 沒有回 Response`); ok = false; continue }
+      if (res.status !== 405) { fail(`api/${name} 的 ${label} 回 ${res.status}，預期 405`); ok = false }
+    }
+    if (ok) pass(`api/${name} 載入成功，default 是 { fetch }、具名 GET/POST 齊全，GET → 405`)
   }
 } finally {
   rmSync(task, { recursive: true, force: true })

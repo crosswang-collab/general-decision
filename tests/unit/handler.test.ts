@@ -1,7 +1,10 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import handler from '../../api/order.ts'
+import api from '../../api/order.ts'
 import type { Order, OrderRequest } from '../../src/types.ts'
+
+// Vercel 走的入口是 default.fetch（函式型 default 會被當成舊式 (req,res)），測試走同一條。
+const handler = api.fetch
 
 const ORDER_JSON = JSON.stringify({
   verdict: 'do',

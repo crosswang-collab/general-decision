@@ -21,7 +21,7 @@ interface WeeklyRequest {
   entries: DiaryEntry[]
 }
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   let req: WeeklyRequest
@@ -60,10 +60,11 @@ export default async function handler(request: Request): Promise<Response> {
   }
 }
 
-// 同 api/order.ts：Vercel 的 Node runtime 只認具名 HTTP method export，
-// default export 被當成舊式 (req, res) => void，回傳的 Response 會被忽略。
+// 同 api/order.ts：函式型的 export default 會被 Vercel 當成舊式 (req, res) => void，
+// 回傳值被丟棄、請求掛住。default 必須是物件形式的 fetch handler。
 export function GET(request: Request): Promise<Response> { return handler(request) }
 export function POST(request: Request): Promise<Response> { return handler(request) }
+export default { fetch: handler }
 
 function buildUser(req: WeeklyRequest, s: ReturnType<typeof stats>): string {
   const lines = req.entries

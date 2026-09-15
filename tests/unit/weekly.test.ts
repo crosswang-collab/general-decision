@@ -1,10 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import handler from '../../api/weekly.ts'
+import api from '../../api/weekly.ts'
 import { parseWeekly } from '../../src/orderParse.ts'
 import { ParseError } from '../../src/orderParse.ts'
 import { makeEntry } from '../../src/diary.ts'
 import type { WeeklyReport } from '../../src/types.ts'
+
+// Vercel 走的入口是 default.fetch（函式型 default 會被當成舊式 (req,res)），測試走同一條。
+const handler = api.fetch
 
 const REPORT = { body: '本週十一道口令，九道完成。你只在不用出門的事情上偷懶。下週歇的口令改成站起來再說。', verdict: '本週講評：合格。' }
 

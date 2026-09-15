@@ -20,7 +20,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
     headers: { 'content-type': 'application/json; charset=utf-8', ...headers },
   })
 
-export default async function handler(request: Request): Promise<Response> {
+async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
   let req: OrderRequest
@@ -69,12 +69,14 @@ export default async function handler(request: Request): Promise<Response> {
   }
 }
 
-// Vercel 的 Node runtime 把 default export 當成舊式 (req, res) => void，回傳的 Response
-// 會被直接忽略、請求永遠掛住（runtime log：「default export returned a `Response`」）。
-// Web 標準簽章的入口是具名 HTTP method export。default 保留給 vite.config.ts 的本機
-// api shim 與測試，兩邊指向同一個 handler，行為完全一致。
+// Vercel 的 Node runtime 只要看到「函式型的 export default」就走舊式 (req, res) => void：
+// 回傳的 Response 直接丟棄、請求永遠掛住，而且具名 export 完全不被理會。
+// 正式站實測過——只加 GET/POST、default 仍是函式時，log 照樣是
+// 「default export returned a `Response`」、狀態碼 0。所以 default 必須是物件形式的
+// fetch handler，不能是函式。具名 GET/POST 一併保留：文件把兩者都列為合法入口。
 export function GET(request: Request): Promise<Response> { return handler(request) }
 export function POST(request: Request): Promise<Response> { return handler(request) }
+export default { fetch: handler }
 
 /** Claude 若挑了店，補上我們算好的步行時間與營業時間（模型不擅長算這個）。 */
 function withPlace(order: Order, places: PlaceCandidate[]): Order {

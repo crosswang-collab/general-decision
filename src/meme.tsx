@@ -13,6 +13,7 @@ export interface MemeCardProps {
   big?: string
   /** 倒數數字（罰則畫面）。給了就取代 big。 */
   number?: number
+  total?: number
   bot: string
   level: Level
   mood: Mood
@@ -22,20 +23,25 @@ export interface MemeCardProps {
 }
 
 export function MemeCard({
-  tone = 'olive', tag, top, big, number, bot, level, mood, wide = false, children,
+  tone = 'olive', tag, top, big, number, total, bot, level, mood, wide = false, children,
 }: MemeCardProps) {
   return (
-    <div className={`meme ${tone}${wide ? ' wide' : ''}`} data-testid="meme">
+    <div className={`meme ${tone}${wide ? ' wide' : ''}${number !== undefined ? ' counting' : ''}${number === 0 ? ' released' : ''}`} data-testid="meme" data-mood={mood}>
       <span className="tag">{tag}</span>
       <div className="txt">
         <div className="cap top" data-testid="meme-top">{top}</div>
         {number === undefined
-          ? <div className="cap big" data-testid="meme-big">{big}</div>
-          : <div className="num" data-testid="meme-num">{number}</div>}
+          ? (big ? <div className="cap big" data-testid="meme-big">{big}</div> : null)
+          : <div key={number} className="num" data-testid="meme-num" role="timer" aria-label={`剩餘 ${number}`}>{number}</div>}
         {children}
         <div className="cap bot" data-testid="meme-bot">{bot}</div>
       </div>
       <Avatar className="face" level={level} mood={mood} onDark />
+      {number !== undefined && total !== undefined && (
+        <div className="count-track" aria-hidden="true">
+          {Array.from({ length: total }, (_, i) => <i key={i} className={i < number ? 'active' : ''} />)}
+        </div>
+      )}
     </div>
   )
 }

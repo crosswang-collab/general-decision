@@ -6,7 +6,7 @@ import { Avatar } from './avatar.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
 import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
 import {
-  allEntries, dayLabel, entriesInWeek, getWeekly, groupByDay, makeEntry, putEntry,
+  allEntries, entriesInWeek, getWeekly, groupByDay, makeEntry, putEntry,
   recentOrders, saveWeekly, stats, timeLabel, weeklyDue, weekStartOf,
 } from './diary.ts'
 import { requestWeekly } from './api.ts'
@@ -157,7 +157,7 @@ export function App() {
 
   return (
     <>
-      <main>
+      <main data-level={level}>
         {screen === 'home' && (
           <Home level={level} onCycle={cycleOfficer} onPick={openIntake} onDiary={() => setScreen('diary')} />
         )}
@@ -207,10 +207,11 @@ function OfficerPlate({ level, mood, onCycle, meta, tap }: {
   const o = OFFICER_BY_LEVEL[level]
   return (
     <div className="officer">
-      <Avatar
-        className="av" level={level} mood={mood} onClick={onCycle}
-        title={onCycle ? '點頭像換班長' : undefined}
-      />
+      {onCycle ? (
+        <button className="avatar-button" onClick={onCycle} aria-label="點頭像換班長">
+          <Avatar key={level} className="av" level={level} mood={mood} />
+        </button>
+      ) : <Avatar className="av" level={level} mood={mood} />}
       <div className="plate">
         <span className="rank">{o.rank}</span>
         <div className="name" data-testid="officer-name">{o.name}</div>
@@ -227,8 +228,8 @@ function Home({ level, onCycle, onPick, onDiary }: {
   const o = OFFICER_BY_LEVEL[level]
   return (
     <section className="screen" data-screen="home">
-      <div className="topnav"><button onClick={onDiary}>新兵日記</button></div>
       <OfficerPlate level={level} mood="idle" onCycle={onCycle} meta="決斷連 · 大事不受理" tap />
+      <div className="topnav"><button onClick={onDiary}>新兵日記</button></div>
       <div className="bubble" data-testid="bubble">
         {o.hello}
         {o.helloSub && <small>{o.helloSub}</small>}
@@ -259,8 +260,8 @@ function Intake({ card, level, choices, onChange, onBack, onSubmit }: {
 }) {
   return (
     <section className="screen" data-screen="intake">
-      <button className="back" onClick={onBack}>← 回報告</button>
       <OfficerPlate level={level} mood="bark" />
+      <button className="back" onClick={onBack}>← 回報告</button>
       <div className="bubble" data-testid="bubble">{MODULE_BARKS[card.id][level]}</div>
       <div>
         {card.intake.map((f) => (
@@ -271,7 +272,7 @@ function Intake({ card, level, choices, onChange, onBack, onSubmit }: {
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button
                     key={n} className={n <= Number(choices[f.key] ?? f.default) ? 'lit' : ''}
-                    aria-label={`${n} 星`} onClick={() => onChange(f.key, n)}
+                    aria-label={`${n} 星`} aria-pressed={n === Number(choices[f.key] ?? f.default)} onClick={() => onChange(f.key, n)}
                   >★</button>
                 ))}
               </div>
@@ -382,20 +383,21 @@ function Stand({ level, onDone }: { level: Level; onDone: () => void }) {
   const done = useRef(onDone)
   done.current = onDone
   useEffect(() => {
-    const t = setInterval(() => {
-      setN((v) => {
-        if (v <= 1) { clearInterval(t); done.current(); return 0 }
-        return v - 1
-      })
-    }, p.stepMs)
+    const t = setInterval(() => setN((v) => Math.max(0, v - 1)), p.stepMs)
     return () => clearInterval(t)
   }, [p.stepMs])
+  useEffect(() => {
+    if (n !== 0) return
+    // 留 420ms 顯示零與解除色；不增加倒數次數，也不新增操作。
+    const t = setTimeout(() => done.current(), 420)
+    return () => clearTimeout(t)
+  }, [n])
   return (
     <section className="screen" data-screen="stand">
       <MemeCard
-        tone="red" tag="決斷連 · 違紀登記"
+        tone={n === 0 ? 'olive' : 'red'} tag="決斷連 · 違紀登記" total={p.count}
         top={`${p.action}，${p.countLabel}！數給我聽！`} number={n} bot={p.line}
-        level={level} mood="punish"
+        level={level} mood={n === 0 ? 'idle' : 'punish'}
       />
     </section>
   )
@@ -414,15 +416,9 @@ function Diary({ level, entries, weeklyFailed, onBack, onWeekly }: {
   const days = groupByDay(entries)
   return (
     <section className="screen" data-screen="diary">
+      <OfficerPlate level={level} mood="idle" meta="每一道口令自動登記。不用寫，班長替你寫。" />
       <button className="back" onClick={onBack}>← 回報告</button>
-      <div className="officer">
-        <Avatar className="av" level={level} mood="idle" />
-        <div className="plate">
-          <span className="rank">新兵日記</span>
-          <div className="name">{entries.length ? dayLabel(entries.at(-1)!.ts) + ' 起' : '還沒有紀錄'}</div>
-          <div className="meta">每一道口令自動登記。不用寫，班長替你寫。</div>
-        </div>
-      </div>
+      <div className="diary-title"><span className="lab">新兵日記</span></div>
       <div className="stats" data-testid="stats">
         <div className="stat"><b data-testid="stat-orders">{s.orders}</b><span>道口令</span></div>
         <div className="stat"><b data-testid="stat-rate">{s.complianceRate}%</b><span>服從率</span></div>
@@ -474,6 +470,11 @@ function Weekly({ level, report, failed, onBack, onHome }: {
             tag={`莒光園地 · ${new Date(report.weekStart).toLocaleDateString('zh-TW')} 起 · 週日 20:00 發布`}
             top="本週講評" bot={report.verdict} level={level} mood="idle"
           >
+            <div className="weekly-score">
+              <strong>{report.stats.complianceRate}<span>%</span></strong>
+              <span>服從率</span>
+              <small>{report.stats.orders} 道口令 · {report.stats.punishments} 次罰則</small>
+            </div>
             <div className="wkbody" data-testid="weekly-body">{report.body}</div>
           </MemeCard>
         ) : (
@@ -491,3 +492,6 @@ function Weekly({ level, report, failed, onBack, onHome }: {
     </section>
   )
 }
+
+// 僅供獨立設計預覽入口使用；正式 App 入口與狀態機不變。
+export { Home, Intake, Cmd, LogScreen, Stand, Diary, Weekly }

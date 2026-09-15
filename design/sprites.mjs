@@ -5,7 +5,7 @@
 //   改表情 = 改一個函式；改配色 = 換 palette；不重畫任何像素。
 //
 // 調色：NES 合法 —— 每個角色用 3 組 palette，每組 3 色 + 透明。
-//   P0 膚 / P1 制服 / P2 專屬配件。合計 ≤ 9 色，與 NES 的多 palette sprite 規則一致。
+//   P0 膚 / P1 制服 / P2 專屬配件。合計 ≤ 8 色，與 NES 的多 palette sprite 規則一致。
 
 // ── 共用格線（三人鎖死，不可個別調整）────────────────────────────
 export const G = {
@@ -22,27 +22,10 @@ export const G = {
 }
 
 // ── 調色盤 ────────────────────────────────────────────────────────
-const INK = '#16180F'
-export const PALETTES = {
-  0: { // 阿良
-    skin: '#F0C49C', skinDark: '#C99366',
-    uni: '#6E8A3E', uniDark: '#4A5F28',
-    accent: '#2F7FB5',            // 汗滴
-    gold: '#F5B21A', white: '#F2EEDF',
-  },
-  1: { // 黑面
-    skin: '#D9A06B', skinDark: '#A8703F',
-    uni: '#587631', uniDark: '#3D5320',
-    accent: '#D93223',            // 值星帶
-    gold: '#F5B21A', white: '#F2EEDF',
-  },
-  2: { // 老郭
-    skin: '#C18A5A', skinDark: '#8F5F33',
-    uni: '#3D5320', uniDark: '#2A3A16',
-    accent: '#E8E4D6',            // 白髮
-    gold: '#F5B21A', white: '#F2EEDF',
-  },
-}
+import { hwPalettes } from './hwpalette.mjs'
+const INK = '#000000'
+export const PALETTES = hwPalettes('nes')
+PALETTES[2].cord = '#F83800' // 使用者確認：第八色，紅哨繩。
 
 // ── 像素畫布 ──────────────────────────────────────────────────────
 const blank = () => Array.from({ length: G.SIZE }, () => Array(G.SIZE).fill(null))
@@ -88,7 +71,7 @@ function headShape(lv) {
     let hw
     if (lv === 0) {
       // 正圓：最寬在中段，上下對稱收圓
-      hw = 11 * Math.sqrt(Math.max(0, 1 - ((t - 0.45) / 0.62) ** 2))
+      hw = 12 * Math.sqrt(Math.max(0, 1 - ((t - 0.45) / 0.62) ** 2))
     } else if (lv === 1) {
       // 圓角方：幾乎等寬，四角收
       hw = 11 - (t < 0.1 ? (0.1 - t) * 28 : 0) - (t > 0.9 ? (t - 0.9) * 26 : 0)
@@ -105,12 +88,12 @@ function headShape(lv) {
 function drawCap(b, lv, P) {
   // 船形帽（garrison cap）正面：中央一道摺脊最高，往兩側下斜蓋住耳朵上緣。
   // 不是圓頂，不是棒球帽 —— 這是台灣兵的第一辨識符號，畫錯整個方向就白做。
-  const tilt = lv === 0 ? 3 : 0          // 阿良歪帽
+  const tilt = lv === 0 ? -3 : 0          // 阿良歪帽
   const lift = lv === 1 ? -1 : lv === 2 ? 1 : 0  // 黑面帽最高、老郭最低
   const top = G.CAP_TOP + lift
 
   // 摺脊 → 兩側下斜。halfWidths 由窄到寬，形成尖頂。
-  const profile = [4, 6, 7, 8, 9, 10, 11, 12, 12]
+  const profile = [2, 4, 6, 7, 8, 9, 10, 12, 12]
   profile.forEach((hw, i) => {
     const y = top + i
     const shift = Math.round(tilt * (1 - i / profile.length))
@@ -133,8 +116,8 @@ function drawCap(b, lv, P) {
   if (lv === 0) {
     // 阿良：整頂帽子右歪（靠 tilt 位移），後腦一撮頭髮翹出來。
     // 不在帽頂兩側加突起 —— 那會讀成角，不是歪帽。
-    rect(b, G.CX - 14, bandY - 2, 3, 4, '#3A2E1E')
-    rect(b, G.CX - 16, bandY, 2, 3, '#3A2E1E')
+    rect(b, G.CX - 14, bandY - 2, 3, 4, INK)
+    rect(b, G.CX - 16, bandY, 2, 3, INK)
   }
   if (lv === 1) {
     // 黑面：帽體最方最高，兩側各外推 2 —— 最寬的頭部剪影
@@ -152,27 +135,24 @@ function drawCap(b, lv, P) {
 
 // ── 眼 ────────────────────────────────────────────────────────────
 function drawEyes(b, lv, P, mood) {
-  const y = G.EYE_Y
-  const away = mood === 'soft' ? 1 : 0 // soft：眼神別開
-  if (lv === 0) {
-    // 阿良：大圓眼 + 高光
-    mirror(b, G.EYE_DX - 2, y - 2, 5, 5, P.white)
-    mirror(b, G.EYE_DX - 1 + away, y - 1, 2, 3, INK)
-    mirror(b, G.EYE_DX - 1 + away, y - 1, 1, 1, P.white)
-  } else if (lv === 1) {
-    // 黑面：一字細長眼
-    if (mood === 'punish') {
-      mirror(b, G.EYE_DX - 2, y - 2, 5, 5, P.white)
-      mirror(b, G.EYE_DX - 1, y - 1, 3, 3, INK)
+  const y = G.EYE_Y, away = mood === 'soft' ? 1 : 0
+  for (const cx of [18, 30]) {
+    if (lv === 0 || (lv === 1 && mood === 'punish')) {
+      rect(b, cx - 2, y - 2, 5, lv === 0 ? 6 : 5, P.white)
+      if (lv === 0) {
+        // Clip white corners to make the eyes round at native size.
+        for (const dx of [-2,2]) for (const dy of [-2,2]) put(b,cx+dx,y+dy,P.skin)
+      }
+      rect(b, cx - 1 + away, y - 1, 3, lv === 0 ? 4 : 3, INK)
+      if (lv === 0) put(b, cx - 1 + away, y - 1, P.white)
+    } else if (lv === 1) {
+      rect(b, cx - 2 + away, y - 1, 5, 2, INK)
     } else {
-      mirror(b, G.EYE_DX - 2, y - 1 + away, 5, 2, INK)
+      rect(b, cx - 3, y - 1, 6, 3, INK)
+      rect(b, cx - 2 + away, y - 1, 2, 1, P.white)
     }
-  } else {
-    // 老郭：墨鏡。壓扁成眼鏡比例，不吃掉整個上半臉
-    mirror(b, G.EYE_DX - 3, y - 1, 6, 3, INK)
-    rect(b, G.CX - 2, y, 4, 1, INK)                 // 鼻橋
-    mirror(b, G.EYE_DX - 2, y - 1, 2, 1, P.white)   // 鏡片反光
   }
+  if (lv === 2) rect(b,21,y,6,1,INK) // 1 px 高的鏡橋
 }
 
 // ── 眉：表情的主要載體 ────────────────────────────────────────────
@@ -187,14 +167,14 @@ const BROWS = {
 function drawBrows(b, lv, P, mood) {
   const [outer, inner] = BROWS[mood]
   const th = lv === 0 ? 1 : lv === 1 ? 2 : 3   // 阿良細、黑面粗、老郭極粗
-  const len = lv === 2 ? 8 : 7
+  const len = lv === 2 ? 7 : lv === 0 ? 5 : 6
   const baseY = G.EYE_Y - (lv === 2 ? 6 : 5)
   for (let i = 0; i < len; i++) {
     const t = i / (len - 1)                     // 0 = 外側，1 = 內側
     const dy = Math.round(outer + (inner - outer) * t)
     const x = G.EYE_DX + 3 - i
     rect(b, G.CX + x - 1, baseY + dy, 1, th, INK)
-    rect(b, G.CX - x, baseY + dy, 1, th, INK)
+    rect(b, G.CX - x, baseY + dy + (lv === 0 ? 1 : 0), 1, th, INK)
   }
   // 老郭：眉上兩道白毛
   if (lv === 2) mirror(b, G.EYE_DX + 1, baseY - 1 + Math.round(outer), 2, 1, P.accent)
@@ -206,7 +186,6 @@ function drawMouth(b, lv, P, mood) {
   if (mood === 'idle' || mood === 'soft') {
     const w = lv === 0 ? 5 : 7
     rect(b, G.CX - Math.floor(w / 2), y + 1, w, 1, INK)
-    if (lv === 0) rect(b, G.CX - 3, y, 1, 1, INK), rect(b, G.CX + 2, y, 1, 1, INK) // 微下弧
   } else if (mood === 'bark') {
     rect(b, G.CX - 4, y, 8, 5, INK)
     rect(b, G.CX - 3, y + 1, 6, 1, P.white)  // 上齒
@@ -223,7 +202,7 @@ function drawMouth(b, lv, P, mood) {
     rect(b, G.CX + 5, y + 2, 1, 2, INK)
   }
   // 老郭：法令紋
-  if (lv === 2 && mood !== 'soft') mirror(b, 5, y - 2, 1, 3, P.skinDark)
+  if (lv === 2) mirror(b, 5, y - 2, 1, 3, P.skinDark)
 }
 
 // ── 身體：制服、名牌、專屬配件 ────────────────────────────────────
@@ -242,15 +221,22 @@ function drawBody(b, lv, P) {
   // 立領
   rect(b, G.CX - 6, G.SHOULDER_Y, 12, 2, P.uniDark)
   rect(b, G.CX - 2, G.SHOULDER_Y, 4, 3, P.skinDark)
+  // 翻領以兩個像素階梯勾出，不增加顏色。
+  for (let i=0;i<4;i++) {
+    put(b, G.CX-6+i, G.SHOULDER_Y+i, P.uniDark)
+    put(b, G.CX+5-i, G.SHOULDER_Y+i, P.uniDark)
+  }
+  rect(b,G.CX-1,G.SHOULDER_Y+4,1,6,P.uniDark)
   // 名牌：角色的右胸 = 看的人的左邊
-  rect(b, G.CX - 13, G.SHOULDER_Y + 4, 7, 3, P.white)
-  rect(b, G.CX - 12, G.SHOULDER_Y + 5, 5, 1, P.uniDark)
+  const nx = lv === 1 ? 7 : 11, ny = lv === 1 ? 44 : 42
+  rect(b, nx, ny, 7, 3, P.white)
+  rect(b, nx + 1, ny + 1, 5, 1, P.uniDark)
 
   if (lv === 1) {
-    // 黑面：紅色值星帶，左肩到右腰，金線鑲邊
+    // 黑面：紅色值星帶，角色右肩到左腰（畫面左上往右下），金線鑲邊
     for (let i = 0; i < 10; i++) {
       const y = G.SHOULDER_Y + i
-      const x = G.CX - 17 + i
+      const x = G.CX - 17 + i * 2
       if (y < G.SIZE) {
         rect(b, x, y, 5, 1, P.accent)
         put(b, x + 5, y, P.gold)
@@ -260,11 +246,11 @@ function drawBody(b, lv, P) {
   if (lv === 2) {
     // 老郭：哨子 + 紅繩
     for (let i = 0; i < 5; i++) {
-      put(b, G.CX - 5 + i, G.SHOULDER_Y + 1 + i, '#D93223')
-      put(b, G.CX + 5 - i, G.SHOULDER_Y + 1 + i, '#D93223')
+      put(b, G.CX - 5 + i, G.SHOULDER_Y + 1 + i, P.cord)
+      put(b, G.CX + 5 - i, G.SHOULDER_Y + 1 + i, P.cord)
     }
     rect(b, G.CX - 2, G.SHOULDER_Y + 6, 5, 3, P.gold)
-    rect(b, G.CX + 3, G.SHOULDER_Y + 7, 1, 1, '#8F5F33')
+    rect(b, G.CX + 3, G.SHOULDER_Y + 7, 1, 1, P.skinDark)
   }
   // 玩具材質層：硬邊高光（左上）。避開值星帶的路徑。
   if (lv !== 1) rect(b, G.CX - 15, G.SHOULDER_Y + 4, 3, 1, P.uniDark)
@@ -274,13 +260,7 @@ function drawBody(b, lv, P) {
 function drawExtras(b, lv, P, mood) {
   if (lv === 0 && mood !== 'praise') {
     // 阿良：汗滴（直徑要夠大，否則縮小後會被讀成髒點）
-    const n = mood === 'bark' || mood === 'punish' ? 2 : 1
-    for (let k = 0; k < n; k++) {
-      const x = G.CX + 13 + k * 3, y = G.EYE_Y - 6 + k * 5
-      rect(b, x, y, 2, 3, P.accent)
-      put(b, x, y + 3, P.accent)
-      put(b, x + 1, y - 1, P.accent)
-    }
+    rect(b, 9, 19, 2, 4, P.accent) // 角色右側太陽穴，所有非 praise 表情固定同一滴
   }
   if (mood === 'punish') {
     // 怒氣線（兩側各兩道）
@@ -303,6 +283,10 @@ export function spriteGrid(lv, mood = 'idle', palettes = PALETTES) {
   const b = blank()
 
   drawBody(b, lv, P)
+  // 小耳朵與輪廓階梯：增加日式遊戲肖像的漫畫感。
+  const ew = lv === 0 ? 12 : lv === 1 ? 12 : 11
+  mirror(b, ew - 1, 23, 3, 5, P.skin)
+  mirror(b, ew + 1, 24, 1, 3, P.skinDark)
   shape(b, G.HEAD_TOP, headShape(lv), P.skin)
   // 臉頰陰影（固定左上光源 → 右下為陰影，一階硬邊）
   headShape(lv).forEach((hw, i) => {
@@ -314,7 +298,10 @@ export function spriteGrid(lv, mood = 'idle', palettes = PALETTES) {
   drawEyes(b, lv, P, mood)
   drawBrows(b, lv, P, mood)
   drawMouth(b, lv, P, mood)
-  drawExtras(b, lv, P, mood)
+  const extras = blank()
+  drawExtras(extras, lv, P, mood)
+  outline(extras)
+  for (let y=0;y<G.SIZE;y++) for(let x=0;x<G.SIZE;x++) if(extras[y][x]) b[y][x]=extras[y][x]
   return b
 }
 

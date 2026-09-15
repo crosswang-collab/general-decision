@@ -23,7 +23,7 @@ const lv = Number(lvArg)
 if (![0, 1, 2].includes(lv)) { console.error('lv 必須是 0、1 或 2'); process.exit(1) }
 
 const P = PALETTES[lv]
-const ALLOWED = ['#16180F', P.skin, P.skinDark, P.uni, P.uniDark, P.accent, P.gold, P.white]
+const ALLOWED = [...new Set(['#000000', ...Object.values(P)])]
 const out = outArg ?? basename(input, extname(input)) + '-48.png'
 
 const dataUrl = `data:image/png;base64,${readFileSync(input).toString('base64')}`
@@ -55,12 +55,13 @@ const png = await page.evaluate(async ({ dataUrl, allowed }) => {
     return [d.data[i], d.data[i + 1], d.data[i + 2]]
   })
   const bg = corner[0]
+  const hasTransparentCorner = [[0,0],[47,0],[0,47],[47,47]].some(([x,y])=>d.data[(y*48+x)*4+3]<128)
 
   for (let i = 0; i < d.data.length; i += 4) {
     const r = d.data[i], g = d.data[i + 1], b = d.data[i + 2], a = d.data[i + 3]
     // ── 3. 去背 ──
     const dBg = (r - bg[0]) ** 2 + (g - bg[1]) ** 2 + (b - bg[2]) ** 2
-    if (a < 128 || dBg < 900) { d.data[i + 3] = 0; continue }
+    if (a < 128 || (!hasTransparentCorner && dBg < 900)) { d.data[i + 3] = 0; continue }
     // ── 2. 吸附到調色盤 ──
     let best = 0, bestD = Infinity
     pal.forEach(([pr, pg, pb], k) => {

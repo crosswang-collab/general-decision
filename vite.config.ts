@@ -23,7 +23,13 @@ function localApi(): Plugin {
           headers: req.headers as Record<string, string>,
           body: req.method === 'GET' || req.method === 'HEAD' ? undefined : body,
         })
-        const out: Response = await mod.default(request)
+        // 與 Vercel 的 dispatch 對齊：具名 HTTP method export 優先，其次 default.fetch。
+        // 不接受函式型的 default —— 那正是上線會掛住的形狀，本機也不該讓它過。
+        const entry = (mod[req.method ?? 'GET'] ?? mod.default?.fetch) as
+          | ((r: Request) => Promise<Response>)
+          | undefined
+        if (!entry) throw new Error(`api/${name} 沒有可用的入口（具名 method export 或 default.fetch）`)
+        const out: Response = await entry(request)
         res.statusCode = out.status
         out.headers.forEach((v, k) => res.setHeader(k, v))
         res.end(Buffer.from(await out.arrayBuffer()))

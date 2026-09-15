@@ -60,6 +60,11 @@ export default async function handler(request: Request): Promise<Response> {
   }
 }
 
+// 同 api/order.ts：Vercel 的 Node runtime 只認具名 HTTP method export，
+// default export 被當成舊式 (req, res) => void，回傳的 Response 會被忽略。
+export function GET(request: Request): Promise<Response> { return handler(request) }
+export function POST(request: Request): Promise<Response> { return handler(request) }
+
 function buildUser(req: WeeklyRequest, s: ReturnType<typeof stats>): string {
   const lines = req.entries
     .slice()

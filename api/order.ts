@@ -69,6 +69,13 @@ export default async function handler(request: Request): Promise<Response> {
   }
 }
 
+// Vercel 的 Node runtime 把 default export 當成舊式 (req, res) => void，回傳的 Response
+// 會被直接忽略、請求永遠掛住（runtime log：「default export returned a `Response`」）。
+// Web 標準簽章的入口是具名 HTTP method export。default 保留給 vite.config.ts 的本機
+// api shim 與測試，兩邊指向同一個 handler，行為完全一致。
+export function GET(request: Request): Promise<Response> { return handler(request) }
+export function POST(request: Request): Promise<Response> { return handler(request) }
+
 /** Claude 若挑了店，補上我們算好的步行時間與營業時間（模型不擅長算這個）。 */
 function withPlace(order: Order, places: PlaceCandidate[]): Order {
   if (!order.place) return order

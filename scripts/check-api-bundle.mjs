@@ -10,6 +10,11 @@
  * 這支腳本只信 vercel.json 承諾會打包的東西：照 functions[].includeFiles 複製檔案，
  * 其餘一律不給。少一個檔就紅燈。
  *
+ * 載入成功還不夠。Vercel 的 Node runtime 只認具名 HTTP method export；把
+ * export default 當成舊式 (req, res) => void，回傳的 Response 會被直接忽略，
+ * 請求永遠掛住（狀態碼 0，不是 500，所以連 error log 都不會有）。所以這支也
+ * 斷言 GET / POST 具名 export 存在，並走那條路徑驗回應。
+ *
  *   node scripts/check-api-bundle.mjs
  */
 import { execFileSync } from 'node:child_process'
@@ -69,19 +74,25 @@ try {
       fail(`api/${name} 載不起來：${e.code ?? ''} ${String(e.message).split('\n')[0]}`)
       continue
     }
-    if (typeof mod.default !== 'function') { fail(`api/${name} 沒有 export default handler`); continue }
+    if (typeof mod.default !== 'function') { fail(`api/${name} 沒有 export default handler（本機 api shim 要用）`); continue }
 
-    // GET 應該回 405（第 4 節：只收 POST）。回得出 405 就代表 handler 真的執行到了。
-    const res = await mod.default(new Request(`https://example.com/api/${name}`, { method: 'GET' }))
+    // Vercel 只認具名 HTTP method export。缺了的話 default export 會被當成舊式
+    // (req, res) => void，回傳的 Response 直接被忽略，請求永遠掛住。
+    const missing = ['GET', 'POST'].filter((m) => typeof mod[m] !== 'function')
+    if (missing.length) { fail(`api/${name} 缺具名 export：${missing.join('、')}，Vercel 會忽略回傳值`); continue }
+
+    // GET 應該回 405（第 4 節：只收 POST）。走 Vercel 實際會用的入口，不是 default。
+    const res = await mod.GET(new Request(`https://example.com/api/${name}`, { method: 'GET' }))
+    if (!(res instanceof Response)) { fail(`api/${name} 的 GET 沒有回 Response`); continue }
     if (res.status !== 405) fail(`api/${name} 的 GET 回 ${res.status}，預期 405`)
-    else pass(`api/${name} 載入成功，GET → 405`)
+    else pass(`api/${name} 載入成功，具名 GET/POST 齊全，GET → 405`)
   }
 } finally {
   rmSync(task, { recursive: true, force: true })
 }
 
 if (failed > 0) {
-  console.error(`\nBUNDLE FAIL：${failed} 項不通過。lambda 裝不起來 = 上線後每次呼叫都 500。`)
+  console.error(`\nBUNDLE FAIL：${failed} 項不通過。上線後 /api/* 不是 500 就是請求掛住。`)
   process.exit(1)
 }
 console.log('\nBUNDLE PASS：api/ 的 function 在 lambda 版面下載得起來。')

@@ -529,8 +529,25 @@ grep -c "border-radius" src/styles.css
 
 這是完成度從 56% 拉到 85% 的地方。**兩件事，先做第二件（diary）暖身，再做第一件（色盤）。**
 
-**3a. diary 畫面補 8-bit**（約 1 小時）
+**3a. diary 畫面補 8-bit**（約 1 小時）　✅ **已於 2026-09-16 完成**
 八個畫面裡唯一沒改的。`.stat{border-radius:14px}`、`.empty{border-radius:20px}`、`.ent .r{border-radius:5px}` 要進 8-bit 規則；分隔線改虛線；卡片加硬陰影。
+
+> **執行結果**：六處全部改吃階段 2 建立的 token（`--radius` / `--card-edge` / `--hard-shadow`），
+> 不再自帶圓角與 1px 細邊。實際走到日記頁用 Chromium 量 computed style，13 項全過。
+>
+> | 元素 | 改動 |
+> |---|---|
+> | `.stat` | 方角 2px、邊框吃 token、**補硬陰影**（日記頁唯一的實體卡片） |
+> | `.empty` | 方角 2px、邊框吃 token、**維持虛線且刻意不給陰影**——空狀態不是卡片，給它陰影會讀成「這裡有東西」 |
+> | `.empty:before` | 筆記本圖示 `border-radius:4px` → `0` |
+> | `.ent .r` | 結果標籤方角、邊框吃 token |
+> | `.day` | 日期分隔線 solid → **dashed**（與 `.meme .tag`／`.meme .bot` 同一個語彙） |
+> | `.notice` | 方角、邊框吃 token、補硬陰影。**計劃沒點到，但它會在日記頁渲染**（`app.tsx:444` 週報失敗時） |
+>
+> **刻意沒動的三處**（都是跨全部八個畫面的共用外框，不屬於「日記頁補完」）：
+> `[data-level="0"] .rank{border-radius:999px}` 與 `[data-level="2"] .rank{border:1px solid}`
+> 是三段火力的角色差異、不是漏改；`.officer{border-bottom:1px solid}` 是全域分隔線，
+> 改成虛線會動到八個畫面。這三處要不要進 8-bit 語彙，建議跟色盤（3b）一起決定。
 
 **3b. 把 NES 色盤灌進 `src/styles.css` 的 `:root`**（約 3–5 小時，單點最大缺口，20% 權重）
 `design/hwpalette.mjs` 的 `toNES()` 現成可用 — 把現有 31 個 hex 逐一吸附到 NES 54 色，再人工調整可讀性（NES 色表的對比不一定夠，深色模式尤其要驗）。

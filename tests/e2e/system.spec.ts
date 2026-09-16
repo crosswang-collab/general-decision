@@ -1,18 +1,20 @@
 // 第 9.1 節：跟隨系統（色彩／字級／動態／對比）與小螢幕規則。
+// 注意：下面兩條硬編色斷言在 2026-09-16 的階段 3b 隨 NES 色盤一起更新過。
+// 那是 DEV-PLAN 明訂的唯一例外——改斷言是因為正確答案變了，不是為了讓測試變綠。
 import { expect, test } from '@playwright/test'
 
 test('深色模式：背景換成深色 token', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })
   await page.goto('/')
   const bg = await page.evaluate(() => window.getComputedStyle(document.body).backgroundColor)
-  expect(bg).toBe('rgb(23, 24, 19)') // --khaki dark = #171813
+  expect(bg).toBe('rgb(0, 0, 0)') // --khaki dark = #000000（NES 色盤，階段 3b）
 })
 
 test('淺色模式：背景是卡其色', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' })
   await page.goto('/')
   const bg = await page.evaluate(() => window.getComputedStyle(document.body).backgroundColor)
-  expect(bg).toBe('rgb(227, 223, 208)') // --khaki = #E3DFD0
+  expect(bg).toBe('rgb(252, 224, 168)') // --khaki = #FCE0A8（NES 色盤，階段 3b）
 })
 
 test('梗圖字用 clamp，超長 big 會換行不溢出', async ({ page }) => {

@@ -452,6 +452,9 @@ head -12 shots/CHECK.md
 
 ### 階段 2 · 清 CSS 債，修 4 個看得見但測不到的視覺 bug（約 2–3 小時）
 
+> ✅ **已於 2026-09-16 完成，但驗收未收尾。** 四個 bug 與檔尾覆寫區都處理完了，
+> 執行結果與**一項無法在這台機器完成的驗收**見本節末。
+
 **為什麼在灌色盤之前做**：目前的改版方式是在 19,591 bytes 舊樣式表尾端追加 1,522 bytes 覆寫，用選擇器蓋掉前面剛定義的 token（`:root{--radius:4px}` 出現在 `:root{--radius:20px}` 之後）。**每加一層覆寫就多一個 specificity 打架。** 色彩層如果疊在一個已經打架的基底上，會更難修。
 
 **做什麼**：把檔尾 20 行覆寫合併回主體，同時修掉這四個確認的 bug：
@@ -485,7 +488,40 @@ npm run e2e:shots && open shots/01-home.png shots/07-weekly.png
 ```sh
 grep -c "border-radius" src/styles.css
 ```
-> 合併後應該比合併前少（重複定義被消掉了）。
+> 合併後應該比合併前少（重複定義被消掉了）。實測 26 次 → 24 次。
+
+**執行結果（2026-09-16）**
+
+| 完成判定 | 結果 |
+|---|---|
+| `src/styles.css` 沒有檔尾覆寫區塊，每個 token 只定義一次 | ✅ 21 行覆寫區整個刪掉，全部併回主體。`--radius` 只在 `:root` 定義一次；`--card-edge`／`--hard-shadow` 除了 `:root`（＝lv1 標準值）之外只有 lv0／lv2 的分級與高對比分支 |
+| 分享輸出的圓角與畫面一致（2px） | ✅ Chromium 量到 `share=2px screen=2px` |
+| 84 單元 + 36 E2E 仍全綠 | ✅ 84/84（`TZ=Asia/Taipei`）、36/36。**零測試斷言變動** |
+| 七張截圖重出後目視確認 | ❌ **做不到**：這台容器裝不了 WebKit，無法重出截圖。改以 Chromium 量 computed style 驗證（見下） |
+
+**四個 bug 的實測值**（Chromium／`getComputedStyle`，這幾個屬性引擎無關）：
+
+| Bug | 實測 |
+|---|---|
+| 1 主磁貼硬陰影 | `rgb(27,29,26) 3px 3px 0px 0px`（原本是 `0 4px 0` 的軟陰影） |
+| 2 週報頭像 | `background-color: rgba(0,0,0,0)`、`border-width: 0px` |
+| 3 分享輸出圓角 | `2px`，與畫面同值 |
+| 4 三段火力 | 邊框 `1px / 2px / 3px`、硬陰影位移 `2 / 3 / 4` |
+
+**兩條死規則**：`--shadow` 已刪（三個消費點改吃 `--hard-shadow`）；`.chip[aria-checked]` 已刪（`app.tsx` 用的是 `aria-pressed`）。
+
+**Bug 4 的決定（Cross 2026-09-16 拍板）**：邊框 1/2/3px ＋ 硬陰影位移 2/3/4px，圓角三級共用 2px。
+理由：8-bit 下 2px 已是最小可見單位，圓角再分級看不出來；線的粗細與影子的輕重才撐得出氣壓差。
+實作上新增 `--hard-shadow` token，並把元件層從硬編 `border-radius:2px;border-width:2px` **改回吃 token**
+——三段火力被抹平的真正原因不只是檔尾那行 `main[data-level]{--radius:4px}`，是元件層根本繞過了 token。
+
+**順手修掉一個自己造成的回歸**：三段火力給了 lv0 1px 的細邊之後，`@media(prefers-contrast:more)` 裡
+原本的 `border-width:2px` 會把老郭的 3px 壓回 2px，而 `:root{--card-edge:2px}` 又蓋不到 `main` 內部
+（自訂屬性由最近的祖先決定，不是 specificity）。改成高對比時把 lv0 墊到 2px、元件層吃 token，
+量到 `2px / 2px / 3px`——下限而不是定值。
+
+**還沒做的一件事**：`shots/*.png` 七張已落後於這次的 CSS 修正，已在 `shots/CHECK.md` 標註。
+**在有 WebKit 的機器上跑 `npm run e2e:shots` 重出七張之後，STOP D 的人工對照才有意義。**
 
 ---
 

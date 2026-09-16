@@ -10,7 +10,15 @@
 截圖環境：WebKit（對齊 iPhone Safari）、iPhone 13 視窗、淺色模式、`npm run e2e:shots` 產出。
 這七張 PNG 來自 **2026-09-14** 那輪 `npm run e2e:shots`（exit 0）。2026-09-11 交付包裡「WebKit 被 macOS sandbox 擋住、
 不得標記 E2E PASS」的說法只適用於那一輪的機器，已於 2026-09-14 解除。2026-09-16 的 Linux 容器裝不了 WebKit，
-沒有重出截圖，所以本表要對照的仍是這七張。設計面的驗收敘述另存於 [DESIGN-CHECK.md](DESIGN-CHECK.md)，不取代本表。
+沒有重出截圖。設計面的驗收敘述另存於 [DESIGN-CHECK.md](DESIGN-CHECK.md)，不取代本表。
+
+> ⚠️ **這七張 PNG 已落後於程式碼（2026-09-16，階段 2）。** 階段 2 修掉四個視覺 bug——
+> 主磁貼補上硬陰影、週報頭像拿掉卡其方框、分享輸出圓角 12px→2px、三段火力的邊框與陰影
+> 重新分級（1/2/3px 與 2/3/4px）。**這四項在下面七張截圖裡都還是舊樣子。**
+> 這台容器裝不了 WebKit（出口網路政策擋住 Playwright 下載網域），無法重出。
+> **請在有 WebKit 的機器上先跑 `npm run e2e:shots` 重出七張，再填下表**，否則會對照到過期畫面。
+> 階段 2 的四個 bug 已用 Chromium 量過 computed style 確認修好，但那是程式層驗證，
+> 不取代這張人工對照表。
 
 | 截圖 | 對照 mock v5 | 判定項 | PASS/FAIL | 備註 |
 |---|---|---|---|---|

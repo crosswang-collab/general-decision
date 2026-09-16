@@ -31,9 +31,15 @@
 
 - UI主要修改：src/styles.css、src/app.tsx、src/meme.tsx、src/share.ts。
 - 最新方向的Vite設計build與TypeScript檢查通過。
-- 前一輪正式build、7個測試檔84項測試通過；最新美術CSS變更後尚未完整重跑全部檢查。
+- 前一輪正式build、7個測試檔84項測試通過。**美術／CSS 改版後的自動化檢查已於 2026-09-14 完整重跑並通過**：
+  `npm run build` exit 0、7 個測試檔 84 項單元測試全過（需 `TZ=Asia/Taipei`，UTC 機器上會有 2 條時區斷言紅，
+  那是環境不是程式）、`npm run e2e` 36 條與 `npm run e2e:shots` 7 條全部 exit 0。
+  仍未完成的是**人工**視覺回歸與 `shots/CHECK.md` 的七列對照（見下一條）。
 - 前一輪內建瀏覽器檢查首頁→點名→命令；checker確認修正後角色名牌、肩線完整、兩欄不相交。
-- 最新日式8-bit更新尚未完成視覺回歸；shots/及handoff/reference/screens/都是上版截圖，不能當成最新成果。
+- 最新日式8-bit更新尚未完成**人工**視覺回歸（`shots/CHECK.md` 第 13.3 節七列 PASS/FAIL 仍留白，maker 不自評）。
+  ⚠️ 但 `shots/` 的七張 PNG **不是**上版截圖 —— 它們在 8-bit 改版的同一個 commit（`edf0321`）就一併重畫了，
+  畫面已是改版後的新視覺，那就是 STOP D 要對照的素材。原句說「不能當成最新成果」會讓 checker 拒用唯一可用的對照。
+  `handoff/reference/screens/`（實際在歷史快照 `decide-codex-handoff/` 底下）確實是上版，維持不採用。
 - Playwright E2E（已於 2026-09-14 解除；本行保留歷史敘述，不是現在式斷言）：
   - 2026-09-11 那輪在 macOS sandbox 下 WebKit 啟動被擋，E2E 未到達網頁。**那是環境問題，不是程式問題。**
   - 2026-09-14 重跑：`npm run e2e` 36 條、`npm run e2e:shots` 7 張，全部 exit 0。
@@ -57,9 +63,17 @@
 
 來源：https://github.com/crosswang-collab/general-decision
 原始基底：aafa780f2078878a7860242338acaf6c50ebb5d4。
-曾fetch到遠端92bddc5並逐檔取回design/8bit、sprites、hwpalette，沒有把整個遠端main合併。本資料夾包含未推送的本次修改；沒有.git。
+曾fetch到遠端92bddc5並逐檔取回design/8bit、sprites、hwpalette，沒有把整個遠端main合併。
 
-若要接回GitHub，先另行clone最新遠端、比對這份快照，再以新分支整合，避免覆蓋遠端其他工作。不需為了本地開發先推送或部署。
+> **⚠️ 以下兩段已過期（2026-09-16 更新）。** 原文寫「本資料夾包含未推送的本次修改；沒有.git」「若要接回GitHub，
+> 先另行clone最新遠端、比對這份快照，再以新分支整合」。那是交付包當時的狀態。
+>
+> **現在這個資料夾就是 git 工作區**，`origin` = https://github.com/crosswang-collab/general-decision 。
+> 交付包已由 PR #1（commit `edf0321`）逐檔接回，後續三個 Vercel 修正是 PR #2／#3／#4，
+> 四個都已併進遠端 `main`，tip 為 `a3feddf` 並已部署到正式站。
+> **不需要另行 clone、比對快照、開新分支整合 —— 那會重做一次已經完成的合併。** 直接在本 repo 接手即可。
+> 交付包的原始快照保留在 `decide-codex-handoff/`，那份裡的同一句話是歷史紀錄，不要改。
+> 接手前先 `git status` 確認自己在哪個分支，並以遠端最新狀態為準。
 
 ## 可以直接貼給Codex的任務
 

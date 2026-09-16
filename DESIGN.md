@@ -127,7 +127,11 @@
 
 ## 驗證邊界
 
-正式 build 與 84 個單元測試通過。內建瀏覽器完成畫面與指定互動檢查。`npm run e2e:shots` 在 WebKit 啟動時遭 macOS sandbox 權限阻擋，未執行到網頁；沒有宣稱 Playwright E2E 或 iOS 真機驗收通過。此為可審閱的 UI 實作／設計提案，不是 App Store 上架完成。
+正式 build 與 84 個單元測試通過（單元測試需 `TZ=Asia/Taipei`：`tests/unit/diary.test.ts` 有兩條斷言綁台北時區）。內建瀏覽器完成畫面與指定互動檢查。
+
+Playwright 狀態（2026-09-14 更新）：本段原本寫「`npm run e2e:shots` 在 WebKit 啟動時遭 macOS sandbox 權限阻擋，未執行到網頁」——那是 2026-09-11 那輪的環境問題，不是程式問題。2026-09-14 重跑 `npm run e2e` 36 條與 `npm run e2e:shots` 7 張，全部 exit 0。2026-09-16 的 Linux 容器裝不了 WebKit（出口網路政策擋住 Playwright 下載網域），以預裝 Chromium 跑 36 條全過，但 Chromium 不是 WebKit 契約，該環境不據此宣稱 STOP C／D。
+
+仍未宣稱通過的是 iOS 真機驗收。此為可審閱的 UI 實作／設計提案，不是 App Store 上架完成。
 
 
 ## 8-bit 角色更新（2026-09-13）
@@ -145,4 +149,12 @@
 
 新版角色增加小耳朵、縮短眉毛、修整眼睛與翻領，保留48×48與原8色色表。使用內建imagegen製作日式Famicom肖像方向圖（retro-direction/character-direction.png），正式15張仍以格線精修產出，避免大圖直接縮小失真。介面改用2px方角、硬邊陰影、虛線分隔及方格節拍；三段火力保留綠色明暗與字重差異。繁中文字維持系統字。
 
-本次build與型別檢查通過；尚未重出七畫面截圖或完成新版互動視覺驗收。screens/保留並標示為上版，實際新版見play.html。
+本次build與型別檢查通過。
+
+⚠️ 這段原本寫「尚未重出七畫面截圖」「實際新版見play.html」，兩處都已過期或找不到檔案，更正如下：
+
+- **七畫面截圖已重出**：`shots/01-home.png`…`shots/07-weekly.png` 在 8-bit 改版的同一個 commit（`edf0321`）
+  就一併重畫，畫面是新版；`shots/CHECK.md` 記載出處為 2026-09-14 那輪 `npm run e2e:shots`（exit 0）。
+- **仍未完成的是人工的**互動視覺驗收與 `shots/CHECK.md` 七列對照表，待 checker 判定。
+- **`play.html` 與 `screens/` 不在 repo 根目錄**，只存在於歷史快照 `decide-design/` 與 `decide-codex-handoff/` 底下。
+  本 repo 的互動預覽入口是 `design.html`（`npm run dev` 後開 `/design.html`）。

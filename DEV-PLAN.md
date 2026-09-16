@@ -401,6 +401,10 @@ npx playwright install webkit && npm run e2e && npm run e2e:shots
 
 ### 階段 1 · 修文件斷鏈與過期宣稱（約 45 分鐘，零風險）
 
+> ✅ **已於 2026-09-16 完成。** 六項全數執行，兩處與計劃描述不符的地方見本節末「執行結果」。
+> 本節底下對 `CODEX-HANDOFF.md:37`、`README.md:26`、`shots/CHECK.md`、`PITFALLS-UI.md`、`DEV-PLAN.md:205`
+> 「現在寫著假陰性」的敘述，是修改前的狀態，保留供對照。
+
 **做什麼**（純文件，不動程式碼）：
 
 1. **改掉四處過期的 E2E 假陰性**：`CODEX-HANDOFF.md:37`、`README.md:26`、`shots/CHECK.md`、`PITFALLS-UI.md` 第 2 條。改成：「2026-09-11 那輪的 macOS sandbox 阻擋了 WebKit 啟動，那是環境問題不是程式問題。2026-09-14 在 Node v24 / Playwright 1.63.0 環境重跑，`npm run e2e` 36 條與 `npm run e2e:shots` 7 條全部 exit 0。」
@@ -427,6 +431,22 @@ node -e "import('./design/hwpalette.mjs').then(m=>{const p=m.hwPalettes('nes')[2
 head -12 shots/CHECK.md
 ```
 > 必須看到「第 13.3 節 人工對照表」與七列空白表。
+
+**執行結果（2026-09-16）**
+
+六項都做了。兩處與計劃的描述不符，照實際情況處理：
+
+1. **第 3 項的前提不成立。** 計劃說 `design/sprites.mjs` 寫 `INK = '#16180F'` 與交付檔的 `#000000` 不符。
+   實際上 repo 與交付包兩份 `sprites.mjs` 都已經是 `#000000`。`#16180F` 真正的所在是
+   `design/8bit/*.dc.html`（`Sprites.dc.html` 有 1957 處）—— 那些是**舊版 sprites.mjs 的建置產物**，
+   連帽頂幾何都不同（舊 `x=20 w=8`／現行 `x=22 w=4`）。也就是說工作檔與程式已經走散。
+   `public/officers/` 的 30 個正式資產是現行版本，App 顯示的是對的。
+   重跑 `build8bit.mjs` 會把五個 `.dc.html` 整批改掉 —— 那是視覺變更，**留給 Cross 決定，這輪沒有重生成**。
+   走散的事實與重現命令已寫進 `design/sprites.mjs` 檔頭與 `design/8bit/README.md`。
+2. **第 2 項的斷鏈比計劃講的更具體。** `design/8bit/README.md` 叫人跑 `node design/build8bit.mjs`，
+   但那支用相對路徑寫 `8bit/*.dc.html`，在 repo 根目錄跑會直接 `ENOENT`。已改成 `cd design && node build8bit.mjs`。
+
+另外多修了計劃沒點到的 `DESIGN.md:130` —— 它帶著同一句過期的 WebKit／sandbox 宣稱。
 
 ---
 

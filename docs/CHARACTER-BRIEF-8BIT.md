@@ -227,7 +227,12 @@ public/officers/0/soft.webp    public/officers/1/soft.webp    public/officers/2/
 
 ⚠️ `soft` 是第五個表情，目前程式裡只有四個。要用它得先改 `src/avatar.tsx` 的 `Mood` 型別 —— 那是我的事，圖生好丟給我就行。
 
-⚠️ 換資產前要先補 `.face { object-fit: contain }`，否則非正方形的圖會被拉伸變形。這是既有 bug，我會一起修。
+✅ **這項已經修好了，換資產時不用再補。** `src/styles.css` 已有
+`.meme .face svg,.meme .face img{display:block;width:100%;height:100%;object-fit:contain}`
+與 `[data-avatar] img{object-fit:contain;image-rendering:pixelated}`。
+（`object-fit` 是下在裡面的 `<img>`／`<svg>` 上，不是 `.face` 容器本身 —— `<Avatar className="face">`
+會渲染成 `<div class="face"><img></div>`，效果相同。）
+目前 30 張資產都是 `normalize.mjs` 產出的 48×48 正方形，非正方形的情形還沒實際跑過視覺驗證。
 
 ---
 

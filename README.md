@@ -8,8 +8,9 @@
 
 ## 現在的狀態
 
-S1–S9 完成，全部檢查綠燈。**S10 部署等你**——見 [DEPLOY.md](DEPLOY.md)，約 5 分鐘。
-進度在 [state/decide-mvp-build.md](state/decide-mvp-build.md)。
+S1–S10 完成。已部署到 Vercel，`/api/order`、`/api/weekly` 在正式站可回應。
+**剩最後兩件事需要你本人**：在 Vercel 填 `ANTHROPIC_API_KEY`（必要）、在 GCP 啟用 Places API (New)（可選）。
+見 [DEPLOY.md](DEPLOY.md)。進度在 [state/decide-mvp-build.md](state/decide-mvp-build.md)。
 
 ## 指令
 
@@ -18,8 +19,9 @@ npm run dev        # 本機開發（同時把 api/ 掛成 /api/*，不必 vercel
 ```
 
 ```bash
-npm run typecheck && npm run test    # STOP A
+TZ=Asia/Taipei npm run typecheck && npm run test    # STOP A
 ```
+> `TZ` 不可省：`tests/unit/diary.test.ts` 有兩條斷言綁台北時區，在 UTC 機器上會紅。
 
 ```bash
 npm run build      # STOP B
@@ -28,6 +30,8 @@ npm run build      # STOP B
 ```bash
 npm run e2e        # STOP C：36 條 Playwright（WebKit，對齊 iPhone Safari）
 ```
+> 先 `npx playwright install webkit`。2026-09-14 那輪 36 條全過（exit 0）。
+> 2026-09-11 交付文件裡「WebKit 被 macOS sandbox 擋住、不得標記 E2E PASS」是那一輪的環境問題，已解除。
 
 ```bash
 npm run e2e:shots  # STOP D：產 shots/ 七張截圖，對照表在 shots/CHECK.md
@@ -36,6 +40,13 @@ npm run e2e:shots  # STOP D：產 shots/ 七張截圖，對照表在 shots/CHECK
 ```bash
 npm run smoke      # 真 curl 打 /api/order，上游用本機假伺服器頂替
 ```
+
+```bash
+npm run check:bundle  # 在本機重建 Vercel lambda 版面，確認 api/ 真的載得起來
+```
+> `npm run dev` 與 `npm run smoke` 走 vite 的 `ssrLoadModule`，解析得了 `.ts` specifier，
+> 所以本機永遠綠燈、抓不到「上線才會爆」的兩類問題（`src/` 沒進 lambda、`export default` 形狀錯）。
+> `check:bundle` 就是補這個缺口的，改 `api/` 或 `vercel.json` 之後一定要跑。
 
 ## 結構
 

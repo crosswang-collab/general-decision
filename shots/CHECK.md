@@ -8,6 +8,9 @@
 3. 逐格填 PASS / FAIL。任一格 FAIL → STOP 條件 D 不成立 → VERDICT: FAIL。
 
 截圖環境：WebKit（對齊 iPhone Safari）、iPhone 13 視窗、淺色模式、`npm run e2e:shots` 產出。
+這七張 PNG 來自 **2026-09-14** 那輪 `npm run e2e:shots`（exit 0）。2026-09-11 交付包裡「WebKit 被 macOS sandbox 擋住、
+不得標記 E2E PASS」的說法只適用於那一輪的機器，已於 2026-09-14 解除。2026-09-16 的 Linux 容器裝不了 WebKit，
+沒有重出截圖，所以本表要對照的仍是這七張。設計面的驗收敘述另存於 [DESIGN-CHECK.md](DESIGN-CHECK.md)，不取代本表。
 
 | 截圖 | 對照 mock v5 | 判定項 | PASS/FAIL | 備註 |
 |---|---|---|---|---|

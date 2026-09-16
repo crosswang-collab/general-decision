@@ -34,7 +34,12 @@
 - 前一輪正式build、7個測試檔84項測試通過；最新美術CSS變更後尚未完整重跑全部檢查。
 - 前一輪內建瀏覽器檢查首頁→點名→命令；checker確認修正後角色名牌、肩線完整、兩欄不相交。
 - 最新日式8-bit更新尚未完成視覺回歸；shots/及handoff/reference/screens/都是上版截圖，不能當成最新成果。
-- Playwright WebKit在本次macOS sandbox中無法啟動，E2E未到達網頁；請在新Codex環境重新執行。
+- Playwright E2E（已於 2026-09-14 解除；本行保留歷史敘述，不是現在式斷言）：
+  - 2026-09-11 那輪在 macOS sandbox 下 WebKit 啟動被擋，E2E 未到達網頁。**那是環境問題，不是程式問題。**
+  - 2026-09-14 重跑：`npm run e2e` 36 條、`npm run e2e:shots` 7 張，全部 exit 0。
+  - 2026-09-16 於 Linux 容器：出口網路政策擋住 playwright.download.prss.microsoft.com 與
+    cdn.playwright.dev，裝不了 WebKit；改用容器預裝 Chromium 跑同一組 `tests/e2e`，36 條全過。
+    Chromium 不是 WebKit 契約，所以 STOP C／D 在該容器上仍算未驗證。有 WebKit 的機器上請以 2026-09-14 那輪為準。
 - 原生觸覺目前只有規格，未串接Capacitor；尚未建立或驗收iOS原生專案。
 - 五名退伍者48px、2秒文化辨識盲測未執行；附blind-test.html，不能用AI模擬回答。
 - 超大字級時閱讀卡允許增高，以保留全文；固定4:5分享輸出另行處理。這與「任何字級均固定4:5」的嚴格規則有差異，尚未得到使用者例外確認。

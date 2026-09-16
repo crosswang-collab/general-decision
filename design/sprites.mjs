@@ -22,10 +22,28 @@ export const G = {
 }
 
 // ── 調色盤 ────────────────────────────────────────────────────────
+//
+// 顏色的唯一真相在 hwpalette.mjs，這裡不再自己宣告任何色值。
+// （2026-09-16 前這裡有兩處硬編：`const INK = '#000000'` 與
+//  `PALETTES[2].cord = '#F83800'`。兩份真相遲早會走散，已收回色盤。）
+//
+// ⚠️ INK 與 `#16180F` 的落差 —— 已實測，結論寫在這裡免得再查一次：
+//   描邊色走的**不是** `toNES()`（那是把任意色吸附到 NES 54 格主調色盤用的，
+//   描邊色沒經過它）。INK 直接取 `HW.nes.ink` = `#000000`，與 `public/officers/`
+//   裡實際解出來的黑一致。
+//   但 `design/8bit/*.dc.html` 裡的 sprite 描邊是 `#16180F`（Sprites.dc.html 有 1957 處）。
+//   那**不是**現在這份程式的輸出，是舊版 sprites.mjs（軍教片方向、INK = '#16180F'、
+//   帽型也不同）留下的建置產物。這些 .dc.html 已經與 sprites.mjs 走散。
+//   重跑 build8bit.mjs 會把它們整批改掉 —— 那是視覺變更，需要 Cross 點頭，
+//   不在階段 1 的範圍，所以這輪刻意沒有重生成。
+//
+// 重現 public/officers/ 那 30 個檔的確切命令（兩支都要跑，見 design/8bit/README.md）：
+//   cd design && node build8bit.mjs    # 重出 design/8bit/*.dc.html + canvas.json（必須在 design/ 底下跑）
+//   python3 design/8bit/export.py      # 重出 public/officers/ 15 PNG + 15 無損 WebP
+//   find public/officers -type f | wc -l   # 應為 30
 import { hwPalettes } from './hwpalette.mjs'
-const INK = '#000000'
 export const PALETTES = hwPalettes('nes')
-PALETTES[2].cord = '#F83800' // 使用者確認：第八色，紅哨繩。
+const INK = PALETTES[0].ink
 
 // ── 像素畫布 ──────────────────────────────────────────────────────
 const blank = () => Array.from({ length: G.SIZE }, () => Array(G.SIZE).fill(null))

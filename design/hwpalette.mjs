@@ -86,6 +86,7 @@ export const HW = {
       { uni: '#005500', dark: '#000000' },  // 老郭：最暗，氣壓最高
     ],
     accents: ['#00AAFF', '#FF0000', '#FFFFFF'], // 汗 / 值星帶 / 白髮
+    cords: [null, null, '#FF0000'],            // 老郭的紅哨繩（第八色）
   },
   // 任天堂 FC/NES —— 3 色/sprite，顏色極省，靠形狀撐辨識
   nes: {
@@ -98,18 +99,30 @@ export const HW = {
       { uni: '#005800', dark: '#000000' },
     ],
     accents: ['#3CBCFC', '#F83800', '#F8F8F8'],
+    cords: [null, null, '#F83800'],            // 老郭的紅哨繩（第八色，使用者確認）
   },
 }
 
-/** 把 HW 設定攤成 sprites.mjs 吃的 PALETTES 形狀。 */
+/**
+ * 把 HW 設定攤成 sprites.mjs 吃的 PALETTES 形狀。
+ *
+ * 回傳的每一層都是**該角色會用到的完整色表**，可以直接當白名單用
+ * （`design/8bit/normalize.mjs` 就是這樣檢查的，CI 要加色數檢查也從這裡拿）。
+ * 所以 `ink`（描邊色）與 `cord`（老郭的紅哨繩）都必須在裡面：
+ * 少了它們，白名單會把畫面上真的存在的顏色判成非法色。
+ * `cord` 只有 lv2 有，其餘兩層不放這個 key —— 讓 `Object.values()` 拿到的
+ * 永遠是合法色，不會混進 null。
+ */
 export function hwPalettes(mode) {
   const h = HW[mode]
   if (!h) throw new Error(`未知的調色盤模式：${mode}（可用：${Object.keys(HW).join(' / ')}）`)
   // Palette swap —— 8-bit 區分同類角色的標準做法：膚色共用，換制服。
   // 這同時就是三段火力的梯度：制服由亮到暗，氣壓由低到高。
   return Object.fromEntries([0, 1, 2].map((lv) => [lv, {
+    ink: h.ink,
     skin: h.skin, skinDark: h.skinDark,
     uni: h.unis[lv].uni, uniDark: h.unis[lv].dark,
     accent: h.accents[lv], gold: h.gold, white: h.white,
+    ...(h.cords?.[lv] ? { cord: h.cords[lv] } : {}),
   }]))
 }

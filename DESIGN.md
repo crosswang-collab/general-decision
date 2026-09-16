@@ -127,7 +127,11 @@
 
 ## 驗證邊界
 
-正式 build 與 84 個單元測試通過。內建瀏覽器完成畫面與指定互動檢查。`npm run e2e:shots` 在 WebKit 啟動時遭 macOS sandbox 權限阻擋，未執行到網頁；沒有宣稱 Playwright E2E 或 iOS 真機驗收通過。此為可審閱的 UI 實作／設計提案，不是 App Store 上架完成。
+正式 build 與 84 個單元測試通過（單元測試需 `TZ=Asia/Taipei`：`tests/unit/diary.test.ts` 有兩條斷言綁台北時區）。內建瀏覽器完成畫面與指定互動檢查。
+
+Playwright 狀態（2026-09-14 更新）：本段原本寫「`npm run e2e:shots` 在 WebKit 啟動時遭 macOS sandbox 權限阻擋，未執行到網頁」——那是 2026-09-11 那輪的環境問題，不是程式問題。2026-09-14 重跑 `npm run e2e` 36 條與 `npm run e2e:shots` 7 張，全部 exit 0。2026-09-16 的 Linux 容器裝不了 WebKit（出口網路政策擋住 Playwright 下載網域），以預裝 Chromium 跑 36 條全過，但 Chromium 不是 WebKit 契約，該環境不據此宣稱 STOP C／D。
+
+仍未宣稱通過的是 iOS 真機驗收。此為可審閱的 UI 實作／設計提案，不是 App Store 上架完成。
 
 
 ## 8-bit 角色更新（2026-09-13）

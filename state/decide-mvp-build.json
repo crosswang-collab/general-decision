@@ -4,7 +4,7 @@
   "status": "blocked",
   "run_id": "run-20260911-230006",
   "budget": {
-    "rounds_used": 1,
+    "rounds_used": 2,
     "rounds_max": 5
   },
   "processed": [
@@ -16,29 +16,59 @@
     "S6",
     "S7",
     "S8",
-    "S9"
-  ],
-  "pending": [
+    "S9",
     "S10"
   ],
-  "failures": [],
-  "escalation": {
-    "step": "S10",
-    "reason": "缺三項只有 Cross 拿得到的憑證，maker 無法完成部署",
-    "blocked_on": [
-      "Vercel CLI 沒有有效 token（vercel whoami → token is not valid）。vercel login 是互動式帳號認證，agent 不做帳號登入。",
-      "ANTHROPIC_API_KEY 不存在於這台機器。",
-      "GOOGLE_PLACES_KEY 不存在，且需要到 Google Cloud Console 啟用 Places API (New) 才能產生。"
+  "pending": [],
+  "failures": [
+    {
+      "when": "2026-09-15",
+      "where": "正式站 /api/order、/api/weekly",
+      "symptom": "ERR_MODULE_NOT_FOUND: Cannot find module '/var/task/src/cards.ts'",
+      "root_cause": "Vercel 的 dependency tracing 解析不了帶 .ts 副檔名的 import specifier，src/ 整個沒被打進 lambda",
+      "fix": "新增 vercel.json：functions[\"api/*.ts\"].includeFiles = \"src/**\"",
+      "verified_on_production": true
+    },
+    {
+      "when": "2026-09-15",
+      "where": "正式站 /api/order、/api/weekly（被上一個 bug 蓋住）",
+      "symptom": "請求永遠掛住、狀態碼 0，log 只有 WARN: default export returned a `Response`",
+      "root_cause": "Vercel 的 Node runtime 看到函式型的 export default 就走舊式 (req, res) => void，回傳的 Response 被丟棄；此時具名 GET/POST export 完全不被理會",
+      "failed_attempt": "只加具名 GET/POST、default 仍是函式 —— 合併後正式站 log 一字不差，沒有修好",
+      "fix": "export default { fetch: handler }",
+      "verified_on_production": true
+    }
+  ],
+  "regression_guard_added": {
+    "script": "scripts/check-api-bundle.mjs",
+    "npm_script": "check:bundle",
+    "why": "npm run dev / npm run smoke 走 vite 的 ssrLoadModule，解析得了 .ts specifier 也不管 export 形狀，結構上抓不到這兩個 bug",
+    "asserts": [
+      "只用 vercel.json includeFiles 承諾的檔案重建 /var/task 版面，api/*.js 必須載得起來",
+      "export default 不可以是函式",
+      "export default.fetch 與具名 GET/POST 都存在，且 GET 回 405"
     ],
-    "not_a_test_failure": "S1–S9 的檢查全部一次通過，沒有任何一步 FAIL 三次。S10 是憑證阻塞，不是紅燈。",
-    "action": "見 DEPLOY.md。第 15 節五步，約 5 分鐘。只有 ANTHROPIC_API_KEY 是必要的；沒有 GOOGLE_PLACES_KEY 也能跑，吃／歇 會走第 7 節規則 6 降級。",
+    "also": "vite.config.ts 的本機 API shim 改成照 Vercel 的 dispatch 順序解析入口，不再接受函式型 default"
+  },
+  "escalation": {
+    "step": "STOP E",
+    "reason": "程式面已通、正式站已部署；剩兩項只有 Cross 能做的環境設定",
+    "blocked_on": [
+      "ANTHROPIC_API_KEY 尚未填入 Vercel 的 Production 環境變數（金鑰本身已實打 claude-sonnet-5 驗證可用）",
+      "GOOGLE_PLACES_KEY 尚未填入 Vercel，且 GCP 專案 919994638922 尚未啟用 Places API (New)"
+    ],
+    "resolved_since_last_update": [
+      "Vercel CLI token —— 已不需要，走 GitHub 整合部署"
+    ],
+    "not_a_test_failure": "S1–S10 的檢查都通過。STOP E 是環境設定阻塞，不是紅燈。",
+    "action": "見 DEPLOY.md 第 2、3 步。填完環境變數要 redeploy 才生效。兩把金鑰曾以明文貼進對話，設定完請輪替。",
     "stop_conditions": {
-      "A": "PASS — npm run typecheck && npm run test 退出碼 0",
+      "A": "PASS — TZ=Asia/Taipei npm run typecheck && npm run test 退出碼 0（84/84）。TZ 不可省：tests/unit/diary.test.ts 有兩條斷言綁台北時區，UTC 機器上會紅",
       "B": "PASS — npm run build 退出碼 0",
-      "C": "PASS — npm run e2e 退出碼 0（36 條：7 happy + 三路 + 4 錯誤路徑 + 系統設定 + 日記 + 週報）",
-      "D": "待 checker 判定 — shots/ 七張已產出，CHECK.md 表格留白（第 3.3 節 maker 不自評）",
-      "E": "BLOCKED — 需要部署憑證"
+      "C": "PASS — 證據來源 2026-09-14 重測：npm run e2e 36 條退出碼 0（WebKit / iPhone 13 profile）。2026-09-11 的 macOS sandbox 阻擋是環境問題，已解除。2026-09-16 的 Linux 容器裝不了 WebKit，以 Chromium 跑 36 條全過但不算 WebKit 契約",
+      "D": "待 checker 判定 — shots/ 七張為 2026-09-14 e2e:shots 產出，shots/CHECK.md 表格留白（第 3.3 節 maker 不自評）",
+      "E": "BLOCKED（範圍已縮小）— 正式站已部署且 /api/* 可回應；剩環境變數與 Places API 啟用"
     }
   },
-  "last_updated": "2026-09-11T15:37:52.165Z"
+  "last_updated": "2026-09-16T02:51:54.000Z"
 }

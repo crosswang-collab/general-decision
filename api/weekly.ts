@@ -2,6 +2,7 @@
 import { WEEKLY_SYSTEM_PROMPT, levelName, moduleTitle } from '../src/prompt.ts'
 import { parseWeekly, ParseError } from '../src/orderParse.ts'
 import { stats } from '../src/diary.ts'
+import { localizeWeeklyText } from '../src/rules.ts'
 import type { DiaryEntry, Level, WeeklyReport } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
@@ -48,7 +49,8 @@ async function handler(request: Request): Promise<Response> {
 
   try {
     const text = await callClaude(WEEKLY_SYSTEM_PROMPT, buildUser(req, s), 700)
-    const { body, verdict } = parseWeekly(text)
+    const parsed = parseWeekly(text)
+    const { body, verdict } = localizeWeeklyText(parsed.body, parsed.verdict) // 階段 D：週報不經 enforceRules，守門在這裡接
     const report: WeeklyReport = { weekStart, level, stats: s, body, verdict }
     return json(report)
   } catch (e) {

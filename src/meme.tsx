@@ -46,11 +46,22 @@ export function MemeCard({
   )
 }
 
-/** 步驟卡 — 第 9 節：梗圖卡下方白卡，▸ 前綴，無梗。 */
-export function StepsCard({ steps }: { steps: string[] }) {
+/**
+ * 步驟卡 — 第 9 節：梗圖卡下方白卡，▸ 前綴，無梗。
+ * 階段 B：伺服器端比中真實店家時，店名本身就是 Google Maps 連結。
+ * 掛在店名上、不另開一顆按鈕——多一顆按鈕就是第二個動作，跟「一個口令一個動作」衝突。
+ * 沒有 mapUrl（Places 降級／比不中）就什麼都不畫，不會出現空連結。
+ */
+export function StepsCard({ steps, place }: { steps: string[]; place?: { name: string; mapUrl?: string } }) {
   return (
     <div className="steps" data-testid="steps">
       {steps.map((s, i) => <p key={i}>{s}</p>)}
+      {place?.mapUrl && (
+        <p className="place">
+          <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
+          <span aria-hidden="true"> ↗</span>
+        </p>
+      )}
     </div>
   )
 }

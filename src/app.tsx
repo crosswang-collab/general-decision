@@ -339,7 +339,7 @@ function Cmd({ card, level, order, canReissue, geoDenied, onDone, onReissue, onS
         top={order.meme.top} big={order.meme.big} bot={order.meme.bot}
         level={level} mood="bark"
       />
-      <StepsCard steps={order.steps} />
+      <StepsCard steps={order.steps} place={order.place} />
       <div className="row">
         <button className="btn" onClick={onDone}>報告班長，完成</button>
         {canReissue && <button className="btn line" data-testid="reissue" onClick={onReissue}>{card.reissueLabel}</button>}

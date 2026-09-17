@@ -549,7 +549,7 @@ grep -c "border-radius" src/styles.css
 > 是三段火力的角色差異、不是漏改；`.officer{border-bottom:1px solid}` 是全域分隔線，
 > 改成虛線會動到八個畫面。這三處要不要進 8-bit 語彙，建議跟色盤（3b）一起決定。
 
-**3b. 把 NES 色盤灌進 `src/styles.css` 的 `:root`**（約 3–5 小時，單點最大缺口，20% 權重）
+**3b. 把 NES 色盤灌進 `src/styles.css` 的 `:root`**（約 3–5 小時，單點最大缺口，20% 權重）　✅ **已於 2026-09-16 完成**
 `design/hwpalette.mjs` 的 `toNES()` 現成可用 — 把現有 31 個 hex 逐一吸附到 NES 54 色，再人工調整可讀性（NES 色表的對比不一定夠，深色模式尤其要驗）。
 
 **⚠️ 這一步會踩紅測試，這是預期的**：`tests/e2e/system.spec.ts:8` 與 `:15` **硬驗** `rgb(23, 24, 19)`（`--ink`）與 `rgb(227, 223, 208)`（`--khaki`）。灌色盤這兩條會立刻紅燈。**正確做法是連同這兩條斷言一起改成新色值，不是把色盤改回去遷就測試。**
@@ -565,12 +565,52 @@ grep -c "border-radius" src/styles.css
 **驗收命令**
 
 ```sh
-node -e "const css=require('fs').readFileSync('src/styles.css','utf8');const hex=[...new Set(css.match(/#[0-9A-Fa-f]{6}/g)||[])];import('./design/hwpalette.mjs').then(m=>{const nes=new Set(m.HW.nes.NES.map(c=>c.toUpperCase()));const bad=hex.filter(h=>!nes.has(h.toUpperCase()));console.log('總色數',hex.length,'非NES',bad.length,bad)})"
+node -e "const css=require('fs').readFileSync('src/styles.css','utf8');const hex=[...new Set(css.match(/#[0-9A-Fa-f]{6}(?![0-9A-Fa-f])/g)||[])];const alpha=[...new Set(css.match(/#[0-9A-Fa-f]{8}/g)||[])];import('./design/hwpalette.mjs').then(m=>{const nes=new Set(m.nesPalette().map(c=>c.toUpperCase()));const bad=hex.filter(h=>!nes.has(h.toUpperCase()));const badA=alpha.filter(h=>!nes.has(h.slice(0,7).toUpperCase()));console.log('不透明',hex.length,'色，非NES',bad.length,bad);console.log('半透明',alpha.length,'色，底色非NES',badA.length,badA);process.exit(bad.length+badA.length?1:0)})"
 ```
+> ⚠️ 原本這行讀 `m.HW.nes.NES` —— **那個屬性不存在**（export 的是 `nesPalette()`），會拿到 `undefined` 然後 crash。
+> 已修正，並補上兩件原版漏掉的事：`#RRGGBBAA` 八位色也要驗底色，而 `{6}` 沒有負向界定會把八位色的前六位誤判成獨立色。
+> 實測輸出：`不透明 14 色，非NES 0` ／ `半透明 5 色，底色非NES 0`。
 
 ```sh
-npm run typecheck && npm run test && npm run build && npm run e2e && npm run e2e:shots
+TZ=Asia/Taipei npm run typecheck && npm run test && npm run build && npm run e2e && npm run e2e:shots
 ```
+
+**執行結果（2026-09-16）**
+
+**⚠️ 計劃指定的做法是錯的，沒有照做。** 計劃說「把現有 31 個 hex 逐一吸附到 NES 54 色」。
+實跑 `toNES()` 的結果：阿良的軍綠 `#68764B` → `#787878`（純灰）、黑面 `#4A5733` → `#503000`（棕）、
+老郭 `#303B27` → `#503000`（**與黑面撞成同一色**）。NES 沒有中低飽和度的橄欖綠，最近鄰是棕與灰。
+次要文字對比還會從 4.42 **倒退**到 3.02。
+
+而 `design/hwpalette.mjs` 檔頭早就寫過正確方法：「品牌色不盲目吸附……是從硬體調色盤裡**挑一格**，
+標準是保住色相身分。」角色美術當初就是這樣做的。**照既有原則走，改用挑格，並與角色共用同一組。**
+
+| 完成判定 | 結果 |
+|---|---|
+| 每個 hex 都能在 NES 陣列裡找到 | ✅ 不透明 14 色、半透明 5 色，全部 NES 合法，0 例外 |
+| 深淺兩模式都通過 WCAG AA | ✅ 在瀏覽器裡量渲染後的實際值，深淺各 14 項、共 28 項全過 |
+| `system.spec.ts` 硬編色斷言已更新，36 條回綠 | ✅ 兩條改成新色值，36/36 |
+| diary 截圖與其他七張一致 | ❌ **做不到**：這台容器裝不了 WebKit，無法重出截圖 |
+
+**Cross 的兩個拍板（2026-09-16）**
+
+- **A1**：`--signal` 用 NES 的爆炸紅 `#F83800`。但它配白字只有 3.68 過不了 AA，所以**紅底文字一律翻黑**。
+  實作上是在 `.meme.red` 重新定義 `--memeText` 與 `--rule`，讓卡片裡所有吃這兩個 token 的東西自動連動——
+  逐條列舉遲早會漏一條，變成白字打在亮紅上。日記的「沒做」標籤同樣吃 `--signal`，一併翻黑。
+  新增 token `--on-signal`，深淺共用 `#000000`。
+- **B1**：三段火力的綠改成 `#007800 / #006800 / #005800`，灰階差從 29.9/25.6 縮到 9.4/9.4。
+  NES 只有五格可用暗綠，能拉開差距的那幾格白字都破 AA。窄梯度可接受，因為階段 2 已經把梯度做在
+  幾何上：邊框 1/2/3px、硬陰影 2/3/4px、字重 750/850/950，加上綠的深淺共四個維度。
+
+**順帶清掉的**
+
+- 死 token `--olive2` 與 `--white`：全 repo 0 個消費點（與階段 2 的 `--shadow` 同一類）。
+- 深色模式的 `main[data-level]` officer 覆寫整組刪掉——梗圖卡是飽和色塊，不像頁面底色需要調暗，
+  深淺共用同一組梯度，`--officer-green`／`--officer-deep` 因此每個只定義一次。
+- `--signal`／`--gold`／`--memeText` 深淺共用：NES 只有一格爆炸紅、一格金、一格白。
+
+**一處計算出來的修正**：深色框線原本要用 `#7C7C7C`，但它在 `#503000` 卡片上只有 2.85（需 3）。
+改用 `#AC7C00`（3.20），那一格本來就在角色色盤裡（`skinDark`）。
 
 ---
 

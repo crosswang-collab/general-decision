@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import api from '../../api/order.ts'
-import type { Order, OrderRequest } from '../../src/types.ts'
+import type { Order, OrderDebug, OrderRequest } from '../../src/types.ts'
 
 // Vercel 走的入口是 default.fetch（函式型 default 會被當成舊式 (req,res)），測試走同一條。
 const handler = api.fetch
@@ -145,6 +145,40 @@ describe('/api/order handler（第 12 節 S5）', () => {
     const res = await handler(post({}))
     expect(claude).toHaveBeenCalledTimes(2)
     expect(((await res.json()) as Order).place?.id).toBe('p1')
+  })
+
+  // 除錯畫面（長按班長名牌）的資料來源：Vercel log 保存期太短，這份跟著回應送到手機上。
+  it('成功時回應帶 debug：查了幾圈、候選與評分、挑中誰、各段幾毫秒', async () => {
+    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON)))
+    const res = await handler(post({}))
+    const body = (await res.json()) as Order & { debug: OrderDebug }
+    expect(body.debug.module).toBe('eat')
+    expect(body.debug.model).toBe('claude-haiku-4-5')
+    expect(body.debug.places?.how).toBe('types=restaurant')
+    expect(body.debug.places?.tries).toEqual([{ r: 800, raw: 1, kept: 1 }])
+    expect(body.debug.places?.candidates[0]).toMatchObject({ name: '阿財魯肉飯' })
+    expect(body.debug.picked).toBe('阿財魯肉飯')
+    expect(body.debug.ms?.total).toBeGreaterThanOrEqual(0)
+    expect(body.debug.retry).toBeUndefined()
+  })
+
+  it('失敗時回應也帶 debug：no_places 看得到兩圈半徑各查到什麼', async () => {
+    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON), () => new Response('boom', { status: 500 })))
+    const res = await handler(post({}))
+    const body = (await res.json()) as { error: string; debug: OrderDebug }
+    expect(body.debug.error).toBe('no_places')
+    expect(body.debug.places?.tries).toEqual([{ r: 800, raw: -1, kept: 0 }, { r: 2000, raw: -1, kept: 0 }])
+  }, 15_000)
+
+  it('模型被重打與被強制指定，debug 都記得下來', async () => {
+    const category = JSON.stringify({
+      verdict: 'do', meme: { top: 'a', big: '附近的小吃店', bot: 'c' }, steps: ['找一家。'], log: 'x',
+    })
+    vi.stubGlobal('fetch', routed(() => claudeOk(category)))
+    const res = await handler(post({}))
+    const body = (await res.json()) as Order & { debug: OrderDebug }
+    expect(body.debug.retry).toBe('noplace')
+    expect(body.debug.forced).toBe('阿財魯肉飯')
   })
 
   it('不需要 Places 的模組不打 Places', async () => {

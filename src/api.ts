@@ -1,15 +1,19 @@
 // 呼叫 /api/order、/api/weekly；重試與錯誤分類（第 4、11 節）。
 import { DAILY_PLACES_CAP } from './places.ts'
-import type { Order, OrderRequest, WeeklyReport } from './types.ts'
+import { recordDebug } from './debug.ts'
+import type { Order, OrderDebug, OrderRequest, WeeklyReport } from './types.ts'
 
 export type ApiErrorKind = 'offline' | 'rate_limited' | 'upstream' | 'bad_request' | 'no_location' | 'no_places'
 
 export class ApiError extends Error {
   kind: ApiErrorKind
-  constructor(kind: ApiErrorKind, message: string) {
+  /** 伺服器在錯誤回應裡附的除錯資料（有的話）。 */
+  debug?: OrderDebug
+  constructor(kind: ApiErrorKind, message: string, debug?: OrderDebug) {
     super(message)
     this.name = 'ApiError'
     this.kind = kind
+    this.debug = debug
   }
 }
 
@@ -93,11 +97,16 @@ async function post<T>(path: string, body: unknown): Promise<{ data: T; res: Res
   }
   if (!res.ok) {
     let code = ''
-    try { code = String(((await res.json()) as { error?: string }).error ?? '') } catch { /* 沒 body 就看狀態碼 */ }
+    let debug: OrderDebug | undefined
+    try {
+      const body = (await res.json()) as { error?: string; debug?: OrderDebug }
+      code = String(body.error ?? '')
+      debug = body.debug
+    } catch { /* 沒 body 就看狀態碼 */ }
     const kind: ApiErrorKind =
       code === 'no_location' || code === 'no_places' ? code
       : res.status === 429 ? 'rate_limited' : res.status === 400 ? 'bad_request' : 'upstream'
-    throw new ApiError(kind, ERROR_TEXT[kind].line)
+    throw new ApiError(kind, ERROR_TEXT[kind].line, debug)
   }
   try {
     return { data: (await res.json()) as T, res }
@@ -106,10 +115,23 @@ async function post<T>(path: string, body: unknown): Promise<{ data: T; res: Res
   }
 }
 
+/**
+ * 伺服器回的 body 是 Order + 一個 debug 欄位。debug 在這裡就剝掉，
+ * 只進除錯紀錄，不跟著 Order 進畫面與日記。失敗也記一筆——「為什麼沒出口令」才是最需要查的。
+ */
 export async function requestOrder(req: OrderRequest): Promise<Order> {
-  const { data, res } = await post<Order>('/api/order', req)
-  addPlacesCalls(Number(res.headers.get('x-places-calls') ?? 0))
-  return data
+  try {
+    const { data, res } = await post<Order & { debug?: OrderDebug }>('/api/order', req)
+    addPlacesCalls(Number(res.headers.get('x-places-calls') ?? 0))
+    const { debug, ...order } = data
+    if (debug) recordDebug(debug)
+    return order as Order
+  } catch (e) {
+    if (e instanceof ApiError) {
+      recordDebug(e.debug ?? { module: req.module, level: req.level, error: e.kind })
+    }
+    throw e
+  }
 }
 
 export async function requestWeekly(body: {

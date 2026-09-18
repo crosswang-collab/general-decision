@@ -3,7 +3,7 @@
 import { CARD_BY_ID } from '../src/cards.ts'
 import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
-import { enforceRules } from '../src/rules.ts'
+import { enforceRules, isNonAnswer } from '../src/rules.ts'
 import { FIELD_MASK, MAX_RESULTS, placeMapUrl, placesSearchFor, toCandidates, type PlacesSearch, type RawPlace } from '../src/places.ts'
 import type { Order, OrderRequest } from '../src/types.ts'
 
@@ -68,7 +68,16 @@ async function handler(request: Request): Promise<Response> {
   const { system, user } = buildOrderPrompt(req, places)
   try {
     const t1 = Date.now()
-    const { text, outputTokens } = await callClaude(system, user, 900)
+    let { text, outputTokens } = await callClaude(system, user, 900)
+    // 模型推掉不答（「大事不受理／去找連長」）→ 重打一次，把它的推辭指名禁止。兩次都推 → 502，前端顯示「班長在開會」。
+    // 不吐口令是不被允許的（Cross 2026-09-18）；prompt 規則 5 已改成禁止，這裡是保證。
+    if (isNonAnswer(parseOrder(text))) {
+      console.warn(`[nonanswer] module=${req.module} 模型推掉不答，重打一次`)
+      const retry = await callClaude(system, `${user}\n\n上一次你回了「大事不受理／去找連長」。這是小事，不准推。重來，必須給可執行口令，verdict 用 "do"。`, 900)
+      if (isNonAnswer(parseOrder(retry.text))) throw upstream(502, '模型兩次都不給口令')
+      text = retry.text
+      outputTokens += retry.outputTokens
+    }
     const claudeMs = Date.now() - t1
     // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪、模型吐了幾個 token。
     console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms model=${MODEL} out=${outputTokens} module=${req.module} level=${req.level}`)

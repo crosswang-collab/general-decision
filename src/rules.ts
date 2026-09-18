@@ -26,12 +26,14 @@ export function buyVerdict(
   return reported ? 'do' : 'stop'
 }
 
-/** 大事不受理 — 第 7 節規則 5。 */
-export const BIG_MATTER_ORDER: Order = {
-  verdict: 'stop',
-  meme: { top: '這不是班長管的', big: '大事不受理', bot: '去找連長。' },
-  steps: ['去找連長。'],
-  log: '大事，未受理。',
+/**
+ * 「沒有回答」偵測 — 2026-09-18 Cross：不吐口令是不被允許的。
+ * 舊規則 5 讓模型自己判「大事」回「大事不受理／去找連長」，Haiku 在喝一杯、出國這種小事上也會誤觸。
+ * 命中的定義：meme 或 steps 出現「不受理」「找連長」，或 steps 是空的。api/order.ts 命中就重打一次。
+ */
+export function isNonAnswer(order: Order): boolean {
+  const text = [order.meme.top, order.meme.big, order.meme.bot, ...order.steps].join('\n')
+  return order.steps.length === 0 || /不受理|找連長|去找.*長/.test(text)
 }
 
 /**
@@ -53,8 +55,8 @@ export function enforceRules(
     const want = buyVerdict(recent, now)
     if (order.verdict !== want) order = { ...order, verdict: want }
   }
-  if (module === 'reply' && order.verdict !== 'do') {
-    order = { ...order, verdict: 'do' } // 第 6 節：reply 永遠 do
+  if (module !== 'attend' && module !== 'buy' && order.verdict !== 'do') {
+    order = { ...order, verdict: 'do' } // 第 6 節：stop 只有 attend / buy 有資格（stopVerdictAllowed），其餘一律 do
   }
   return localizeOrder(order)
 }

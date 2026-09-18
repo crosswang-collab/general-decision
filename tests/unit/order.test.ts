@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseOrder, ParseError } from '../../src/orderParse.ts'
-import { attendVerdict, buyVerdict, enforceRules, lightsOut } from '../../src/rules.ts'
+import { attendVerdict, buyVerdict, enforceRules, isNonAnswer, lightsOut } from '../../src/rules.ts'
 import { closingTime, toCandidates, walkMinutes, type RawPlace } from '../../src/places.ts'
 import type { Order } from '../../src/types.ts'
 
@@ -58,6 +58,26 @@ describe('attend 硬規則（第 13.1 節）', () => {
     const wrong = { ...ORDER, verdict: 'do' } as Order
     const fixed = enforceRules(wrong, 'attend', { stars: 2, occasion: '飯局' }, new Date(), [])
     expect(fixed.verdict).toBe('stop')
+  })
+})
+
+describe('不吐口令是不被允許的（2026-09-18）', () => {
+  it('「大事不受理／去找連長」判為沒有回答；正常口令不是', () => {
+    expect(isNonAnswer({ verdict: 'stop', meme: { top: '這不是班長管的', big: '大事不受理', bot: '去找連長。' }, steps: ['去找連長。'], log: '' })).toBe(true)
+    expect(isNonAnswer({ ...ORDER, steps: ['這種事去找連長。'] } as Order)).toBe(true)
+    expect(isNonAnswer({ ...ORDER, steps: [] } as Order)).toBe(true)
+    expect(isNonAnswer(ORDER as Order)).toBe(false)
+  })
+  it('stopVerdictAllowed=false 的卡（rest / eat / travel…）回 stop 一律改 do', () => {
+    const wrong = { ...ORDER, verdict: 'stop' } as Order
+    for (const m of ['eat', 'go', 'rest', 'sleep', 'reply', 'travel'] as const) {
+      expect(enforceRules(wrong, m, {}, new Date(), []).verdict, m).toBe('do')
+    }
+  })
+  it('系統提示詞不再有「大事不受理」的出口', async () => {
+    const { ORDER_SYSTEM_PROMPT } = await import('../../src/prompt.ts')
+    expect(ORDER_SYSTEM_PROMPT).not.toMatch(/回 verdict:'stop'，meme.big=「大事不受理」/)
+    expect(ORDER_SYSTEM_PROMPT).toMatch(/禁止回「大事不受理」/)
   })
 })
 

@@ -48,8 +48,12 @@ async function handler(request: Request): Promise<Response> {
       const raw = await fetchPlaces(req.loc, radius, types)
       placesCalled = 1
       places = toCandidates(raw, req.loc, now, req.exclude ?? [])
-    } catch {
-      places = [] // 第 8 節：Places 掛掉就降級，永遠有口令出來
+      console.info(`[places] ok raw=${raw.length} candidates=${places.length}`)
+    } catch (e) {
+      // 第 8 節：Places 掛掉就降級，永遠有口令出來。
+      // 但一定要留一行 log：之前這裡靜靜吞掉，「Places 到底有沒有通」從外面完全看不出來。
+      console.warn(`[places] fail：${(e as Error).message}`)
+      places = []
     }
   }
 

@@ -178,6 +178,33 @@ for (const scheme of ['light', 'dark'] as const) {
         await page.goto('/')
         for (let i = 0; i < clicks; i++) await page.locator('.officer .av').click()
         await expect(page.locator(`main[data-level="${level}"]`)).toBeVisible()
+
+        // 階段 C：名牌上的階級章。SVG 的 stroke 不在 audit() 的文字／邊框掃描範圍內，這裡另外量：
+        // 每條槓的實色都要在色盤內，且對名牌底過 3:1（非文字）。lv2 名牌是反白的，銅金色要跟著反過來。
+        const mark = await page.evaluate((pal) => {
+          const allowed = new Set(pal)
+          const lin = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }
+          const rgb = (c: string) => c.match(/\d+/g)!.slice(0, 3).map(Number)
+          const hex = (c: string) => '#' + rgb(c).map((v) => v.toString(16).padStart(2, '0').toUpperCase()).join('')
+          const lum = (c: number[]) => 0.2126 * lin(c[0]!) + 0.7152 * lin(c[1]!) + 0.0722 * lin(c[2]!)
+          const cr = (a: number[], b: number[]) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05)
+          const badge = document.querySelector('.plate .rank')!
+          // 名牌底：自己有不透明底就用自己的，否則往上找（lv0/lv2 有底、lv1 透明）
+          let n: Element | null = badge
+          let bg = 'rgb(255, 255, 255)'
+          while (n) { const c = getComputedStyle(n).backgroundColor; if (!/rgba\(.*,\s*0\)$/.test(c) && c !== 'transparent') { bg = c; break } n = n.parentElement }
+          const bars = [...badge.querySelectorAll('svg polyline')].map((el) => {
+            const s = getComputedStyle(el).stroke
+            return { hex: hex(s), inPalette: allowed.has(hex(s)), ratio: Math.round(cr(rgb(s), rgb(bg)) * 100) / 100 }
+          })
+          return { key: badge.querySelector('svg')?.getAttribute('data-insignia'), bg: hex(bg), bars }
+        }, NES)
+        expect(mark.bars.length, `lv${level}/${scheme} 名牌上要有階級章`).toBeGreaterThan(0)
+        for (const b of mark.bars) {
+          expect(b.inPalette, `lv${level}/${scheme} 徽章色 ${b.hex} 不在色盤內`).toBe(true)
+          expect(b.ratio, `lv${level}/${scheme} 徽章色 ${b.hex} 對名牌底 ${mark.bg}`).toBeGreaterThanOrEqual(3)
+        }
+        expect(mark.key, `lv${level} 徽章`).toBe(['1-1', '1-2', '2-1'][level])
         await page.locator('[data-card="eat"]').click()
         await page.getByRole('button', { name: '是！班長' }).click()
         await expect(page.locator('[data-screen="cmd"]')).toBeVisible()

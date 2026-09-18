@@ -1,5 +1,6 @@
 // 三位班長 — DECIDE-DEV-DOC-v1.md 第 7 節人設、第 10 節罰則。
 // 語料三層各 ≥ 20 句；API 每次隨機抽 3 句塞進 prompt 當風格樣本。
+import { NCO_INSIGNIA, type Insignia, type NcoRank } from './insignia.ts'
 import type { Level } from './types.ts'
 
 export interface Punishment {
@@ -12,7 +13,11 @@ export interface Punishment {
 
 export interface Officer {
   level: Level
-  rank: string
+  /** 職務：班長 / 值星班長 / 連士官長。這是「做什麼」，不是階級。 */
+  duty: string
+  /** 階級：下士 / 中士 / … 三等士官長。決定階級章（DEV-PLAN-2 階段 C）。 */
+  rank: NcoRank
+  insignia: Insignia
   name: string
   hello: string // 首頁開場白
   helloSub?: string // 開場白下方小字（mock 的 <small>）
@@ -23,7 +28,9 @@ export interface Officer {
 export const OFFICERS: Officer[] = [
   {
     level: 0,
-    rank: '菜鳥班長',
+    duty: '菜鳥班長',
+    rank: '下士', // 剛下部隊的士官起點（C-4.1 建議案；Cross 2026-09-18 授權自行定案）
+    insignia: NCO_INSIGNIA.下士,
     name: '阿良',
     hello: '報、報告什麼事？班長…我是說，你各位啊。',
     corpus: [
@@ -56,7 +63,9 @@ export const OFFICERS: Officer[] = [
   },
   {
     level: 1,
-    rank: '值星班長',
+    duty: '值星班長',
+    rank: '中士', // 二手來源：中士多任班長（C-4.1 建議案）
+    insignia: NCO_INSIGNIA.中士,
     name: '黑面',
     hello: '你各位啊！報告什麼事？',
     helloSub: '合理的要求是訓練，不合理的要求是磨練。',
@@ -90,7 +99,9 @@ export const OFFICERS: Officer[] = [
   },
   {
     level: 2,
-    rank: '士官長',
+    duty: '連士官長', // 「士官長」原本混用成職務；連士官長才是職務名
+    rank: '三等士官長',
+    insignia: NCO_INSIGNIA.三等士官長,
     name: '老郭',
     hello: '你各位給我站好。要報告什麼，三秒內講完。',
     helloSub: '我看過的菜鳥比你吃過的饅頭多。',

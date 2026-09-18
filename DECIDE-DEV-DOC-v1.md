@@ -235,7 +235,7 @@ level 2「士官長 老郭」：毒舌、比喻狠、不留情。「我看過的
 3. log（登記）不罵、不誇：只描述時間、口令、使用者做了什麼。例：「你去了你不想去的地方，而且準時。」
 4. 不解釋、不道歉、不給第二選項。verdict=stop 時，steps 第一條就是替代行為（且只有一個）。
 5. 這八張卡全部是小事，一律要給可執行的口令。禁止回「大事不受理」、禁止叫使用者去找連長或任何人、禁止用「這不是班長管的」之類的話推掉。verdict:'stop' 只有在【已判定】明講時才出現（赴、買不買）。
-6. 只能推薦 places 陣列裡的店（若有提供）。不得編造店名。places 為空 → 依 promptHint 用類型代替，並在 meme.bot 註明「店家資料暫時拿不到」。
+6. 有候選店家時，必須從清單挑出**一家真店**：place.id、place.name 照清單填，meme.big 就是那家店名。禁止只講類別（「甜點店」「小吃店」「附近的咖啡廳」一律不算回答）、禁止編造店名、禁止挑清單外的店。優先挑評價數多且分數高、且正在營業的；註明「HH:MM 開」的店要在 steps 寫清楚幾點開門。（2026-09-18 起沒有「類別降級」：候選為空是伺服器層的失敗，見第 8 節。）
 7. 輸出**只有** Order JSON（第 5 節），不加任何前後文、不加 markdown fence。
 8. 一律用台灣的繁體中文與台灣生活用語。禁止中國用語（質量／視頻／信息／屏幕／默認／用戶／激活／軟件／網絡／出租車／自行車／盒飯／早點／地鐵）。軍事用語只用國軍的（連、排、班、值星、出操、寢室、輔導長），不得使用解放軍編制用語（指導員、政委）。
 
@@ -260,12 +260,15 @@ level 0 種子：報、報告什麼事／班長…我是說，你各位／有、
 - API：Places API (New) `places:searchNearby`，`fieldMask` 固定：
   `places.id,places.displayName,places.location,places.currentOpeningHours.openNow,places.regularOpeningHours.weekdayDescriptions,places.primaryType`
   → 這組 mask 落在 **Enterprise** SKU（因為含營業時間）。**免費額度 1,000 次/月**（2026-07 價表）。單人每日 ≤ 5 次 = 150 次/月，安全。
-- 半徑：eat 800m、rest 800m；`maxResultCount: 8`；只保留 `openNow === true`。`languageCode: zh-TW`。
+- 半徑：eat 800m、rest 800m；一次向 Places 要 15 筆，給 Claude 最多 8 筆；`languageCode: zh-TW`。fieldMask 另含 `rating`、`userRatingCount`、`currentOpeningHours.nextOpenTime`（同一 Enterprise SKU）。
+- 候選（`toCandidates`，2026-09-18）：營業中 **或 60 分內開門**（帶 `opensAt`）；依貝氏平均評分排序（先驅 4.0 分／20 則）；評分 ≥4.0 且 ≥10 則的店有兩家以上就只留那些。
+- 第一圈查不到候選 → 半徑 ×2.5 再查一次；仍為空 → **502 `no_places`**「附近查不到營業中的店。換個地方再報告。」不再用類別降級。
+- 模型沒挑清單裡的真店（只講類別／編店名）→ 重打一次；第二次仍沒有 → 伺服器直接指定評價最高那家（`[place] forced`）。
 - rest 走 `places:searchText`（`textQuery` 依「喝什麼」對中文關鍵字，`locationBias` 圓、`rankPreference: DISTANCE`、`openNow: true`），同一組 fieldMask、同一 SKU。2026-09-18 起：之前 rest 只查 `cafe` type 半徑 500m，正式站常常 `raw=0`。
 - 換口令：帶 `exclude[]`，過濾後再送 Claude。
-- **硬上限**：`api/order.ts` 每日 Places 呼叫計數（記在 Vercel KV？→ 不，零維護：記在回應 header 給前端，前端存本機，超過 40 次/日 → 前端不帶定位打 API，Claude 依第 7 節規則 6 降級）。
-- 定位權限被拒／無定位：`loc` 不送，走降級。
-- 錯誤：Places 4xx → 視為永久，降級；5xx／逾時 → 重試 1 次後降級。**永遠有口令出來**，沒有空白畫面。
+- **硬上限**：每日 Places 呼叫計數記在回應 header 給前端，前端存本機，超過 40 次/日 → 前端不帶定位；吃／歇沒定位 → 前端直接顯示 `no_location`（見下）。
+- 定位權限被拒／無定位：吃／歇 → 前端不打 API，顯示「不報座標，班長就點不了店。開定位再報告。」（伺服器收到沒 `loc` 的吃／歇也回 400 `no_location`）。其餘卡不需要定位。
+- 錯誤：Places 4xx／5xx／逾時 → 各半徑重試後仍沒有候選 → 502 `no_places`。畫面永遠有話與重試鍵，但**不再拿類別當口令**（Cross 2026-09-18：只講類別一律視為失敗）。
 
 ---
 
@@ -296,7 +299,7 @@ level 0 種子：報、報告什麼事／班長…我是說，你各位／有、
 | 功能 | 規格 |
 |---|---|
 | 罰則 | level 0：罰站 10 秒（1s/步）；1：伏地挺身 20 下（0.6s）；2：交互蹲跳 30 下（0.5s）。倒數完自動回首頁。寫 DiaryEntry outcome=punished |
-| 換口令 | 同一 DiaryEntry 覆寫 big/placeName，outcome=reissued；一次口令最多換 1 次，第二次仍關門 → Claude 依規則 6 降級 |
+| 換口令 | 同一 DiaryEntry 覆寫 big/placeName，outcome=reissued；一次口令最多換 1 次；帶 `exclude[]`，候選空了就是 `no_places` |
 | 日記 | 唯讀列表，按日分組；頂部三格：口令數／服從率（done+reissued ÷ 全部）／罰則數 |
 | 週報產生時機 | 開 app 時若 `now ≥ 本週日 20:00` 且 `weekly[weekStart]` 不存在 → 呼叫 `/api/weekly` 一次並存本機；日記頁「看本週莒光園地」可手動觸發（同一週只算一次 API） |
 | 分享 | `navigator.share` 分享 `html-to-image` 轉出的 PNG；不支援時顯示「長按截圖」 |
@@ -307,7 +310,8 @@ level 0 種子：報、報告什麼事／班長…我是說，你各位／有、
 
 | 情況 | 畫面 |
 |---|---|
-| 定位被拒 | 班長：「不報座標？行，班長用常識。」→ 降級出口令 |
+| 定位被拒 | 吃／歇：「不報座標，班長就點不了店。開定位再報告。」+ 重試鍵，不打 API；其餘卡不需要定位 |
+| 附近沒有營業中的店 | 502 `no_places`：「附近查不到營業中的店。換個地方再報告。」+ 重試鍵 |
 | Places 0 家營業中 | 「附近沒有開的。回營吃泡麵，12 分鐘。」（Claude 產出，仍是命令） |
 | Claude API 429/5xx | 重試 2 次（1s、3s）；仍失敗 → 「班長在開會。30 秒後再報告。」+ 重試鍵 |
 | Claude 回傳非法 JSON | 4 層解析：直接 parse → 去 fence → regex 取 `{…}` → 失敗視同 5xx |

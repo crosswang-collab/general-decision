@@ -9,7 +9,10 @@ import type { Order, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
 
-const MODEL = 'claude-sonnet-5'
+// 口令走 Haiku 4.5：正式站 [timing] 量到 Claude 佔 3.1–6.4s、等於整段伺服器時間，
+// 換模型是唯一還能砍掉一半以上的手段。要退回 Sonnet 不用改碼，設 ORDER_MODEL=claude-sonnet-5 重新部署即可。
+// 語氣與規則的保證在 enforceRules() 與 localizeOrder()，不靠模型本身。
+const MODEL = process.env.ORDER_MODEL ?? 'claude-haiku-4-5'
 // base URL 可用環境變數覆蓋：本機煙霧測試與公司 proxy 都用得到。正式環境不設就是官方端點。
 const ANTHROPIC_URL = `${process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'}/v1/messages`
 const PLACES_URL = `${process.env.PLACES_BASE_URL ?? 'https://places.googleapis.com'}/v1/places:searchNearby`
@@ -64,14 +67,14 @@ async function handler(request: Request): Promise<Response> {
   const { system, user } = buildOrderPrompt(req, places)
   try {
     const t1 = Date.now()
-    const text = await callClaude(system, user, 900)
+    const { text, outputTokens } = await callClaude(system, user, 900)
     const claudeMs = Date.now() - t1
-    // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪。
-    console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms module=${req.module} level=${req.level}`)
+    // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪、模型吐了幾個 token。
+    console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms model=${MODEL} out=${outputTokens} module=${req.module} level=${req.level}`)
     const order = enforceRules(parseOrder(text), req.module, req.choices ?? {}, now, req.recentOrders)
     return json(withPlace(order, places), 200, {
       'x-places-calls': String(placesCalled),
-      'x-timing': `places=${placesMs};claude=${claudeMs}`,
+      'x-timing': `places=${placesMs};claude=${claudeMs};model=${MODEL}`,
     })
   } catch (e) {
     const status = e instanceof ParseError ? 502 : (e as UpstreamError)?.status ?? 502
@@ -118,7 +121,7 @@ function upstream(status: number, msg: string): UpstreamError {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /** 第 11 節：429/5xx 重試 2 次（1s、3s）。 */
-async function callClaude(system: string, user: string, maxTokens: number): Promise<string> {
+async function callClaude(system: string, user: string, maxTokens: number): Promise<{ text: string; outputTokens: number }> {
   const key = process.env.ANTHROPIC_API_KEY
   if (!key) throw upstream(500, 'ANTHROPIC_API_KEY 未設定')
 
@@ -149,10 +152,10 @@ async function callClaude(system: string, user: string, maxTokens: number): Prom
     }
 
     if (res.ok) {
-      const data = (await res.json()) as { content?: { type: string; text?: string }[] }
+      const data = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { output_tokens?: number } }
       const text = (data.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join('')
       if (!text) throw upstream(502, 'Claude 回空內容')
-      return text
+      return { text, outputTokens: data.usage?.output_tokens ?? -1 }
     }
 
     // 4xx（除了 429）是永久錯，不重試

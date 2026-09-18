@@ -48,6 +48,29 @@ export interface Order {
   log: string // 完成後登記文字，≤ 30 字，描述式，不誇
 }
 
+/**
+ * 一次 /api/order 的真實經過，跟著回應送回前端存起來（src/debug.ts）。
+ * 存在的理由：Vercel 免費方案的 runtime log 留很短，隔夜就查不到，
+ * 而「店家為什麼拿不到」這種問題永遠是事後才被發現的。這份跟著手機走。
+ * 不屬於 Order 本體，前端收到就從 Order 上剝掉，不會進日記。
+ */
+export interface OrderDebug {
+  module: ModuleId
+  level: Level
+  model?: string
+  ms?: { places: number; claude: number; total: number }
+  outTokens?: number
+  places?: {
+    how: string // 'text="居酒屋"' 或 'types=restaurant'
+    tries: { r: number; raw: number; kept: number }[] // raw = -1 代表這一圈查失敗
+    candidates: { name: string; rating?: number; count?: number; walkMin?: number; openUntil?: string; opensAt?: string }[]
+  }
+  retry?: 'nonanswer' | 'noplace' // 模型被重打的原因
+  forced?: string // 伺服器強制指定的店名
+  picked?: string // 最後用的店名
+  error?: string
+}
+
 export interface DiaryEntry {
   id: string // `${ts}-${module}`  冪等鍵
   ts: string

@@ -12,9 +12,10 @@ import {
 } from './diary.ts'
 import { requestWeekly } from './api.ts'
 import { SHARE_FALLBACK, shareNode } from './share.ts'
+import { clearDebug, formatCandidate, formatDebug, readDebug, type DebugEntry } from './debug.ts'
 import type { DiaryEntry, Level, ModuleCard, ModuleId, Order, WeeklyReport } from './types.ts'
 
-type Screen = 'home' | 'intake' | 'waiting' | 'cmd' | 'log' | 'stand' | 'error' | 'diary' | 'weekly'
+type Screen = 'home' | 'intake' | 'waiting' | 'cmd' | 'log' | 'stand' | 'error' | 'diary' | 'weekly' | 'debug'
 
 const LEVEL_KEY = 'decide.level'
 
@@ -171,7 +172,7 @@ export function App() {
     <>
       <main data-level={level}>
         {screen === 'home' && (
-          <Home level={level} onCycle={cycleOfficer} onPick={openIntake} onDiary={() => setScreen('diary')} />
+          <Home level={level} onCycle={cycleOfficer} onPick={openIntake} onDiary={() => setScreen('diary')} onDebug={() => setScreen('debug')} />
         )}
         {screen === 'intake' && card && (
           <Intake
@@ -205,6 +206,7 @@ export function App() {
             onBack={() => setScreen('diary')} onHome={goHome}
           />
         )}
+        {screen === 'debug' && <Debug level={level} onHome={goHome} />}
       </main>
       <footer>
         <span>班長有什麼了不起？— 你小學當的那個不算。</span>
@@ -213,10 +215,35 @@ export function App() {
   )
 }
 
-function OfficerPlate({ level, mood, onCycle, meta, tap }: {
-  level: Level; mood: 'idle' | 'bark'; onCycle?: () => void; meta?: string; tap?: boolean
+const LONG_PRESS_MS = 700
+
+/**
+ * 長按名牌（不是頭像，頭像是換班長用的）→ 除錯畫面。
+ * 藏起來是刻意的：這是給 Cross 查問題用的，不是給使用者的功能。
+ */
+function useLongPress(onLongPress?: () => void) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cancel = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+  }, [])
+  useEffect(() => cancel, [cancel]) // 元件被換掉時不要留下計時器
+  if (!onLongPress) return {}
+  return {
+    onPointerDown: () => { cancel(); timer.current = setTimeout(() => { timer.current = null; onLongPress() }, LONG_PRESS_MS) },
+    onPointerUp: cancel,
+    onPointerLeave: cancel,
+    onPointerCancel: cancel,
+    // iOS 長按預設會跳選字／放大鏡，擋掉才按得出來
+    onContextMenu: (e: { preventDefault: () => void }) => e.preventDefault(),
+  }
+}
+
+function OfficerPlate({ level, mood, onCycle, onLongPress, meta, tap }: {
+  level: Level; mood: 'idle' | 'bark'; onCycle?: () => void; onLongPress?: () => void
+  meta?: string; tap?: boolean
 }) {
   const o = OFFICER_BY_LEVEL[level]
+  const press = useLongPress(onLongPress)
   return (
     <div className="officer">
       {onCycle ? (
@@ -224,7 +251,7 @@ function OfficerPlate({ level, mood, onCycle, meta, tap }: {
           <Avatar key={level} className="av" level={level} mood={mood} />
         </button>
       ) : <Avatar className="av" level={level} mood={mood} />}
-      <div className="plate">
+      <div className="plate" data-testid="plate" {...press}>
         <span className="rank"><InsigniaMark insignia={o.insignia} title={o.rank} />{o.rank} {o.duty}</span>
         <div className="name" data-testid="officer-name">{o.name}</div>
         {meta && <div className="meta">{meta}</div>}
@@ -234,13 +261,14 @@ function OfficerPlate({ level, mood, onCycle, meta, tap }: {
   )
 }
 
-function Home({ level, onCycle, onPick, onDiary }: {
-  level: Level; onCycle: () => void; onPick: (id: ModuleId) => void; onDiary: () => void
+function Home({ level, onCycle, onPick, onDiary, onDebug }: {
+  level: Level; onCycle: () => void; onPick: (id: ModuleId) => void
+  onDiary: () => void; onDebug: () => void
 }) {
   const o = OFFICER_BY_LEVEL[level]
   return (
     <section className="screen" data-screen="home">
-      <OfficerPlate level={level} mood="idle" onCycle={onCycle} meta="決斷連 · 大事不受理" tap />
+      <OfficerPlate level={level} mood="idle" onCycle={onCycle} onLongPress={onDebug} meta="決斷連 · 大事不受理" tap />
       <div className="topnav"><button onClick={onDiary}>新兵日記</button></div>
       <div className="bubble" data-testid="bubble">
         {o.hello}
@@ -507,3 +535,60 @@ function Weekly({ level, report, failed, onBack, onHome }: {
 
 // 僅供獨立設計預覽入口使用；正式 App 入口與狀態機不變。
 export { Home, Intake, Cmd, LogScreen, Stand, Diary, Weekly }
+
+/**
+ * 除錯畫面（長按班長名牌進來）。顯示最近 10 次 /api/order 的真實經過：
+ * 幾秒、Places 查了幾圈查到幾家、候選店與評分、模型有沒有被重打、有沒有被強制指定。
+ * 截圖或按「複製」就能把資料帶出這支手機——Vercel 的 log 隔一段時間就查不到了。
+ */
+function Debug({ level, onHome }: { level: Level; onHome: () => void }) {
+  const [entries, setEntries] = useState<DebugEntry[]>(readDebug)
+  const [copied, setCopied] = useState(false)
+
+  const copy = useCallback(() => {
+    void (async () => {
+      try {
+        await navigator.clipboard.writeText(formatDebug(entries))
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
+      } catch { setCopied(false) }
+    })()
+  }, [entries])
+
+  return (
+    <section className="screen" data-screen="debug">
+      <button className="back" onClick={onHome}>← 回報告</button>
+      <OfficerPlate level={level} mood="idle" meta={`除錯紀錄 · 最近 ${entries.length} 次`} />
+      <div className="row">
+        <button className="btn line" data-testid="debug-copy" onClick={copy}>{copied ? '已複製' : '複製全部'}</button>
+        <button className="btn ghost" data-testid="debug-clear" onClick={() => { clearDebug(); setEntries([]) }}>清掉</button>
+      </div>
+      {entries.length === 0 && <div className="notice" data-testid="debug-empty">還沒有紀錄。出一道口令再回來看。</div>}
+      {entries.map((e, i) => (
+        <article key={`${e.at}-${i}`} className="dbg" data-testid="debug-entry">
+          <h4>
+            {new Date(e.at).toLocaleTimeString('zh-TW', { hour12: false })} · {CARD_BY_ID[e.module]?.title ?? e.module} · lv{e.level}
+            {e.error && <em data-testid="debug-error"> 失敗：{e.error}</em>}
+          </h4>
+          {e.ms && (
+            <p>時間 總 {(e.ms.total / 1000).toFixed(1)}s（店家 {e.ms.places}ms、班長 {e.ms.claude}ms）{e.outTokens ? ` · ${e.outTokens} 字元` : ''}{e.model ? ` · ${e.model}` : ''}</p>
+          )}
+          {e.places && (
+            <>
+              <p>查法 {e.places.how}</p>
+              {e.places.tries.map((t, j) => (
+                <p key={j}>查詢 半徑 {t.r}m → {t.raw < 0 ? '查詢失敗' : `找到 ${t.raw} 家，留下 ${t.kept} 家`}</p>
+              ))}
+              {e.places.candidates.length > 0 && (
+                <ul>{e.places.candidates.map((c, j) => <li key={j}>{formatCandidate(c)}</li>)}</ul>
+              )}
+            </>
+          )}
+          {e.retry && <p>重打 {e.retry === 'nonanswer' ? '模型推掉不答' : '模型沒挑真店'}</p>}
+          {e.forced && <p>強制指定 {e.forced}</p>}
+          {e.picked && <p>挑中 {e.picked}</p>}
+        </article>
+      ))}
+    </section>
+  )
+}

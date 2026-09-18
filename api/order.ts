@@ -5,7 +5,7 @@ import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
 import { enforceRules, isNonAnswer } from '../src/rules.ts'
 import { FETCH_COUNT, FIELD_MASK, WIDEN_FACTOR, matchPlace, placeMapUrl, placesSearchFor, toCandidates, type PlacesSearch, type RawPlace } from '../src/places.ts'
-import type { Order, OrderRequest } from '../src/types.ts'
+import type { Order, OrderDebug, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
 
@@ -41,6 +41,9 @@ async function handler(request: Request): Promise<Response> {
 
   const card = CARD_BY_ID[req.module]
   const now = new Date(req.now)
+  // 除錯紀錄：整趟的真實數字，跟著回應送回前端存進手機（src/debug.ts）。
+  // Vercel 免費方案的 log 保存期太短，事後回報就查不到了；這份跟著手機走。
+  const dbg: OrderDebug = { module: req.module, level: req.level }
 
   // ── Places（eat / rest 必須有真店；沒有就是失敗，不再用類別降級）──────
   // Cross 2026-09-18：只講「甜點店／小吃店」一律視為禁止；必須是地圖上正在營業或即將營業、評價數多且正面的真店。
@@ -50,26 +53,37 @@ async function handler(request: Request): Promise<Response> {
   let placesCalled = 0
   if (card.needsPlaces) {
     if (!req.loc) {
-      return json({ error: 'no_location', message: '不報座標，班長就點不了店。開定位再報告。' }, 400)
+      dbg.error = 'no_location'
+      return json({ error: 'no_location', message: '不報座標，班長就點不了店。開定位再報告。', debug: dbg }, 400)
     }
     const search = placesSearchFor(card, req.choices ?? {})
     const what = search.kind === 'text' ? `text="${search.textQuery}"` : `types=${search.includedTypes.join('|')}`
+    const tries: { r: number; raw: number; kept: number }[] = []
     // 第一圈半徑查不到 → 放大 2.5 倍再查一次，之後才算失敗。
     for (const radius of [search.radius, Math.round(search.radius * WIDEN_FACTOR)]) {
       try {
         const raw = await fetchPlaces(req.loc, { ...search, radius })
         placesCalled++
         places = toCandidates(raw, req.loc, now, req.exclude ?? [])
+        tries.push({ r: radius, raw: raw.length, kept: places.length })
         console.info(`[places] ok ${what} r=${radius} raw=${raw.length} candidates=${places.length}`)
       } catch (e) {
+        tries.push({ r: radius, raw: -1, kept: 0 }) // raw=-1：這一圈整個查失敗
         console.warn(`[places] fail ${what} r=${radius}：${(e as Error).message}`)
       }
       if (places.length) break
     }
     placesMs = Date.now() - t0
+    dbg.places = {
+      how: what,
+      tries,
+      candidates: places.map((p) => ({ name: p.name, rating: p.rating, count: p.ratingCount, walkMin: p.walkMin, openUntil: p.openUntil, opensAt: p.opensAt })),
+    }
     if (!places.length) {
+      dbg.error = 'no_places'
+      dbg.ms = { places: placesMs, claude: 0, total: Date.now() - t0 }
       return json(
-        { error: 'no_places', message: '附近查不到營業中的店。換個地方再報告。' },
+        { error: 'no_places', message: '附近查不到營業中的店。換個地方再報告。', debug: dbg },
         502,
         { 'x-places-calls': String(placesCalled), 'x-timing': `places=${placesMs};claude=0` },
       )
@@ -91,7 +105,8 @@ async function handler(request: Request): Promise<Response> {
     }
     const why = complaint(parsed)
     if (why) {
-      console.warn(`[retry] module=${req.module} ${isNonAnswer(parsed) ? 'nonanswer' : 'noplace'}，重打一次`)
+      dbg.retry = isNonAnswer(parsed) ? 'nonanswer' : 'noplace'
+      console.warn(`[retry] module=${req.module} ${dbg.retry}，重打一次`)
       const retry = await callClaude(system, `${user}\n\n${why}`, 900)
       text = retry.text
       outputTokens += retry.outputTokens
@@ -100,6 +115,7 @@ async function handler(request: Request): Promise<Response> {
       // 第二次還是沒挑到真店 → 伺服器直接指定評價最高的那家，不讓類別答案流出去。
       if (card.needsPlaces && !matchPlace(parsed.place, places)) {
         const top = places[0]!
+        dbg.forced = top.name
         console.warn(`[place] forced module=${req.module} → ${top.name}`)
         parsed = { ...parsed, meme: { ...parsed.meme, big: top.name.slice(0, 10) }, place: { id: top.id, name: top.name } }
       }
@@ -108,14 +124,22 @@ async function handler(request: Request): Promise<Response> {
     // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪、模型吐了幾個 token。
     console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms model=${MODEL} out=${outputTokens} module=${req.module} level=${req.level}`)
     const order = enforceRules(parsed, req.module, req.choices ?? {}, now, req.recentOrders)
-    return json(withPlace(order, places), 200, {
+    const final = withPlace(order, places)
+    dbg.model = MODEL
+    dbg.outTokens = outputTokens
+    dbg.ms = { places: placesMs, claude: claudeMs, total: Date.now() - t0 }
+    dbg.picked = final.place?.name
+    // debug 是 Order 以外的欄位，前端收到就剝掉，不會進日記（src/api.ts requestOrder）。
+    return json({ ...final, debug: dbg }, 200, {
       'x-places-calls': String(placesCalled),
       'x-timing': `places=${placesMs};claude=${claudeMs};model=${MODEL}`,
     })
   } catch (e) {
     const status = e instanceof ParseError ? 502 : (e as UpstreamError)?.status ?? 502
+    dbg.error = status === 429 ? 'rate_limited' : 'upstream'
+    dbg.ms = { places: placesMs, claude: Date.now() - t0 - placesMs, total: Date.now() - t0 }
     return json(
-      { error: status === 429 ? 'rate_limited' : 'upstream', message: '班長在開會。30 秒後再報告。' },
+      { error: dbg.error, message: '班長在開會。30 秒後再報告。', debug: dbg },
       status === 429 ? 429 : 502,
       { 'x-places-calls': String(placesCalled) },
     )

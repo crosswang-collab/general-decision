@@ -39,7 +39,7 @@ export function buildOrderPrompt(req: OrderRequest, places: PlaceCandidate[]): {
   const system = [
     ORDER_SYSTEM_PROMPT,
     '',
-    `【本次火力】level ${req.level}：${officer.rank} ${officer.name}`,
+    `【本次火力】level ${req.level}：${officer.rank} ${officer.duty} ${officer.name}`,
     `【當次風格樣本】（改寫，不要整句照抄）\n${samples.map((s) => `・${s}`).join('\n')}`,
     '',
     `【模組規則：${card.title}】\n${card.promptHint}`,
@@ -87,7 +87,8 @@ export const WEEKLY_SYSTEM_PROMPT = `${ORDER_SYSTEM_PROMPT}
 只輸出 WeeklyReport JSON：{"weekStart":"","level":0,"stats":{"orders":0,"complianceRate":0,"punishments":0,"weakestModule":null},"body":"","verdict":""}`
 
 export function levelName(level: Level): string {
-  return `${OFFICER_BY_LEVEL[level].rank} ${OFFICER_BY_LEVEL[level].name}`
+  const o = OFFICER_BY_LEVEL[level]
+  return `${o.rank} ${o.duty} ${o.name}`
 }
 
 export function moduleTitle(id: ModuleId): string {

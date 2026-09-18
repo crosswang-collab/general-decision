@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CARD_BY_ID, MAJOR_IDS, MINOR_IDS, MODULE_BARKS } from './cards.ts'
 import { OFFICER_BY_LEVEL } from './officers.ts'
 import { Avatar } from './avatar.tsx'
+import { InsigniaMark } from './insignia.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
 import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
 import {
@@ -213,7 +214,7 @@ function OfficerPlate({ level, mood, onCycle, meta, tap }: {
         </button>
       ) : <Avatar className="av" level={level} mood={mood} />}
       <div className="plate">
-        <span className="rank">{o.rank}</span>
+        <span className="rank"><InsigniaMark insignia={o.insignia} title={o.rank} />{o.rank} {o.duty}</span>
         <div className="name" data-testid="officer-name">{o.name}</div>
         {meta && <div className="meta">{meta}</div>}
         {tap && <div className="tap">點頭像換班長</div>}

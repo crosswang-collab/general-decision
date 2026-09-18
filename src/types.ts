@@ -17,7 +17,12 @@ export interface ModuleCard {
   subtitle: string
   intake: IntakeField[]
   needsPlaces: boolean // eat, rest = true
-  placesQuery?: { includedTypes: string[]; radiusByTransport?: Record<string, number> }
+  placesQuery?: {
+    includedTypes: string[]
+    radiusByTransport?: Record<string, number>
+    /** 有這個就改走 Text Search：依 intake 某個 key 的選項對到中文關鍵字（居酒屋、熱炒沒有對應的 Places type）。 */
+    textQuery?: { key: string; byOption: Record<string, string> }
+  }
   promptHint: string // 給 Claude 的模組專屬規則（第 6 節）
   reissueLabel: string | null // '店關了' | '路封了' | null
   stopVerdictAllowed: boolean // buy=true（可以「不買」）, attend=true（可以「不去」）

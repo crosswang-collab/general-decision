@@ -1,5 +1,6 @@
 // Places 呼叫規則 — 第 8 節。純邏輯放這裡，實際 fetch 在 api/order.ts。
 import type { PlaceCandidate } from './prompt.ts'
+import type { ModuleCard } from './types.ts'
 
 /** 第 8 節：固定 fieldMask，這組落在 Enterprise SKU。 */
 export const FIELD_MASK = [
@@ -39,6 +40,29 @@ export function placeMapUrl(id: string, name: string): string {
  */
 export function placesTypesFor(defaultTypes: string[], choices: Record<string, string | number>): string[] {
   return choices.taste === '甜食' ? ['bakery', 'cafe', 'ice_cream_shop'] : defaultTypes
+}
+
+/** 這次要怎麼查 Places：Nearby（照 type）或 Text Search（照中文關鍵字）。 */
+export type PlacesSearch =
+  | { kind: 'nearby'; includedTypes: string[]; radius: number }
+  | { kind: 'text'; textQuery: string; radius: number }
+
+/**
+ * 卡片 + 使用者選擇 → 查法。有 textQuery 設定就走 Text Search：選項對不到關鍵字時用該欄 default 的關鍵字，
+ * 再對不到就退回 Nearby。沒有 textQuery 的卡照舊走 Nearby（eat 的甜食改 type 也在這裡）。
+ */
+export function placesSearchFor(
+  card: Pick<ModuleCard, 'intake' | 'placesQuery'>,
+  choices: Record<string, string | number>,
+): PlacesSearch {
+  const radius = card.placesQuery?.radiusByTransport?.default ?? 800
+  const tq = card.placesQuery?.textQuery
+  if (tq) {
+    const fallback = card.intake.find((f) => f.key === tq.key)?.default
+    const q = tq.byOption[String(choices[tq.key] ?? '')] ?? tq.byOption[String(fallback ?? '')]
+    if (q) return { kind: 'text', textQuery: q, radius }
+  }
+  return { kind: 'nearby', includedTypes: placesTypesFor(card.placesQuery?.includedTypes ?? [], choices), radius }
 }
 
 /** 公尺 → 步行分鐘（80 m/min，無條件進位，至少 1）。 */

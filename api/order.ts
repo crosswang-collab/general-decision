@@ -4,7 +4,7 @@ import { CARD_BY_ID } from '../src/cards.ts'
 import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
 import { enforceRules } from '../src/rules.ts'
-import { FIELD_MASK, MAX_RESULTS, placeMapUrl, placesTypesFor, toCandidates, type RawPlace } from '../src/places.ts'
+import { FIELD_MASK, MAX_RESULTS, placeMapUrl, placesSearchFor, toCandidates, type PlacesSearch, type RawPlace } from '../src/places.ts'
 import type { Order, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
@@ -15,7 +15,8 @@ export const config = { runtime: 'nodejs' }
 const MODEL = process.env.ORDER_MODEL ?? 'claude-haiku-4-5'
 // base URL 可用環境變數覆蓋：本機煙霧測試與公司 proxy 都用得到。正式環境不設就是官方端點。
 const ANTHROPIC_URL = `${process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'}/v1/messages`
-const PLACES_URL = `${process.env.PLACES_BASE_URL ?? 'https://places.googleapis.com'}/v1/places:searchNearby`
+const PLACES_BASE = process.env.PLACES_BASE_URL ?? 'https://places.googleapis.com'
+const PLACES_URL = { nearby: `${PLACES_BASE}/v1/places:searchNearby`, text: `${PLACES_BASE}/v1/places:searchText` }
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
@@ -47,13 +48,13 @@ async function handler(request: Request): Promise<Response> {
   let places: PlaceCandidate[] = []
   let placesCalled = 0
   if (card.needsPlaces && req.loc) {
-    const radius = card.placesQuery?.radiusByTransport?.default ?? 800
-    const types = placesTypesFor(card.placesQuery?.includedTypes ?? [], req.choices ?? {})
+    const search = placesSearchFor(card, req.choices ?? {})
     try {
-      const raw = await fetchPlaces(req.loc, radius, types)
+      const raw = await fetchPlaces(req.loc, search)
       placesCalled = 1
       places = toCandidates(raw, req.loc, now, req.exclude ?? [])
-      console.info(`[places] ok raw=${raw.length} candidates=${places.length}`)
+      const what = search.kind === 'text' ? `text="${search.textQuery}"` : `types=${search.includedTypes.join('|')}`
+      console.info(`[places] ok ${what} r=${search.radius} raw=${raw.length} candidates=${places.length}`)
     } catch (e) {
       // 第 8 節：Places 掛掉就降級，永遠有口令出來。
       // 但一定要留一行 log：之前這裡靜靜吞掉，「Places 到底有沒有通」從外面完全看不出來。
@@ -166,25 +167,26 @@ async function callClaude(system: string, user: string, maxTokens: number): Prom
   throw last
 }
 
-/** 第 8 節：5xx／逾時重試 1 次後降級；4xx 視為永久，直接降級。 */
-async function fetchPlaces(
-  loc: { lat: number; lng: number },
-  radius: number,
-  includedTypes: string[],
-): Promise<RawPlace[]> {
+/**
+ * 第 8 節：5xx／逾時重試 1 次後降級；4xx 視為永久，直接降級。
+ * Nearby 照 type 查；Text Search 用中文關鍵字（居酒屋、熱炒沒有 type），locationBias 圓 + 依距離排序 + 只要營業中。
+ * 兩者同一組 fieldMask、同一個 SKU。languageCode 固定 zh-TW，店名才會是台灣寫法（第 7 節規則 8）。
+ */
+async function fetchPlaces(loc: { lat: number; lng: number }, search: PlacesSearch): Promise<RawPlace[]> {
   const key = process.env.GOOGLE_PLACES_KEY
   if (!key) throw new Error('GOOGLE_PLACES_KEY 未設定')
 
-  const body = JSON.stringify({
-    includedTypes,
-    maxResultCount: MAX_RESULTS,
-    locationRestriction: { circle: { center: { latitude: loc.lat, longitude: loc.lng }, radius } },
-  })
+  const circle = { center: { latitude: loc.lat, longitude: loc.lng }, radius: search.radius }
+  const body = JSON.stringify(
+    search.kind === 'text'
+      ? { textQuery: search.textQuery, pageSize: MAX_RESULTS, openNow: true, rankPreference: 'DISTANCE', languageCode: 'zh-TW', locationBias: { circle } }
+      : { includedTypes: search.includedTypes, maxResultCount: MAX_RESULTS, languageCode: 'zh-TW', locationRestriction: { circle } },
+  )
 
   for (let attempt = 0; attempt < 2; attempt++) {
     let res: Response
     try {
-      res = await fetch(PLACES_URL, {
+      res = await fetch(PLACES_URL[search.kind], {
         method: 'POST',
         headers: {
           'content-type': 'application/json',

@@ -47,6 +47,12 @@ export const MOCK_ORDERS: Record<ModuleId, Order> = {
     steps: ['關掉頁面。', '72 小時後還想要，再來報告。'],
     log: '不買，頁面已關。',
   },
+  travel: {
+    verdict: 'do',
+    meme: { top: '護照拿出來', big: '日本 福岡', bot: '五天，夠你把屁股從椅子上拔起來' },
+    steps: ['今天 22:00 前訂機票。', '出發前查護照效期滿六個月。', '週日回國。'],
+    log: '出國，福岡五天，機票已訂。',
+  },
 }
 
 /** 換口令用的第二家（mock v5 的 reissue()）。 */

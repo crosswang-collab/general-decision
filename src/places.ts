@@ -33,6 +33,14 @@ export function placeMapUrl(id: string, name: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}&query_place_id=${encodeURIComponent(id)}`
 }
 
+/**
+ * 依使用者的「想吃」決定 Places 查什麼類型。甜食 → 麵包／咖啡／冰店；其餘照卡片預設。
+ * 只用 Places API (New) Table A 裡長期存在的類型，避免一個不合法的 type 讓整次查詢 400。
+ */
+export function placesTypesFor(defaultTypes: string[], choices: Record<string, string | number>): string[] {
+  return choices.taste === '甜食' ? ['bakery', 'cafe', 'ice_cream_shop'] : defaultTypes
+}
+
 /** 公尺 → 步行分鐘（80 m/min，無條件進位，至少 1）。 */
 export function walkMinutes(meters: number): number {
   return Math.max(1, Math.ceil(meters / 80))

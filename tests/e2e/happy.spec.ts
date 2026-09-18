@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test'
 import { mockOrder } from './fixtures.ts'
 
-const CARDS = ['eat', 'go', 'attend', 'rest', 'sleep', 'reply', 'buy'] as const
+const CARDS = ['eat', 'go', 'attend', 'rest', 'sleep', 'reply', 'buy', 'travel'] as const
 
 test.use({ geolocation: { latitude: 25.033, longitude: 121.5654 }, permissions: ['geolocation'] })
 
@@ -26,11 +26,11 @@ for (const id of CARDS) {
   })
 }
 
-test('首頁：班長在最上面、4 磁貼 + 3 小鍵', async ({ page }) => {
+test('首頁：班長在最上面、4 磁貼 + 4 小鍵', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('.officer')).toBeVisible()
   await expect(page.locator('.grid .tile')).toHaveCount(4)
-  await expect(page.locator('.minor button')).toHaveCount(3)
+  await expect(page.locator('.minor button')).toHaveCount(4)
 })
 
 test('點頭像換班長，三段火力循環', async ({ page }) => {

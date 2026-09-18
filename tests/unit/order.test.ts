@@ -127,3 +127,13 @@ describe('Places 過濾（第 8 節）', () => {
     expect(closingTime(undefined, now)).toBeUndefined()
   })
 })
+
+describe('placesTypesFor（甜食改查甜點店）', () => {
+  it('甜食 → bakery / cafe / ice_cream_shop；其餘照卡片預設', async () => {
+    const { placesTypesFor } = await import('../../src/places.ts')
+    expect(placesTypesFor(['restaurant'], { taste: '甜食' })).toEqual(['bakery', 'cafe', 'ice_cream_shop'])
+    expect(placesTypesFor(['restaurant'], { taste: '鹹食' })).toEqual(['restaurant'])
+    expect(placesTypesFor(['restaurant'], {})).toEqual(['restaurant'])
+    expect(placesTypesFor(['cafe'], { taste: '甜食' })).toEqual(['bakery', 'cafe', 'ice_cream_shop'])
+  })
+})

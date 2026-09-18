@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { CARDS, CARD_BY_ID, MAJOR_IDS, MINOR_IDS, MODULE_BARKS } from '../../src/cards.ts'
 
 describe('cards（第 13.1 節）', () => {
-  it('共 7 張', () => {
-    expect(CARDS).toHaveLength(7)
+  it('共 8 張', () => {
+    expect(CARDS).toHaveLength(8)
   })
 
   it('id 唯一', () => {
@@ -45,9 +45,9 @@ describe('cards（第 13.1 節）', () => {
     }
   })
 
-  it('reissueLabel 只在 eat / rest / go 有值（第 6 節）', () => {
+  it('reissueLabel 只在 eat / rest / go / travel 有值（第 6 節）', () => {
     const withReissue = CARDS.filter((c) => c.reissueLabel).map((c) => c.id).sort()
-    expect(withReissue).toEqual(['eat', 'go', 'rest'])
+    expect(withReissue).toEqual(['eat', 'go', 'rest', 'travel'])
   })
 
   it('stopVerdictAllowed 只在 attend / buy（第 6 節）', () => {
@@ -59,9 +59,9 @@ describe('cards（第 13.1 節）', () => {
     for (const c of CARDS) expect(c.promptHint.length, c.id).toBeGreaterThan(10)
   })
 
-  it('首頁排列：4 大磁貼 + 3 小鍵，剛好覆蓋 7 張卡', () => {
+  it('首頁排列：4 大磁貼 + 4 小鍵，剛好覆蓋 8 張卡', () => {
     expect(MAJOR_IDS).toHaveLength(4)
-    expect(MINOR_IDS).toHaveLength(3)
+    expect(MINOR_IDS).toHaveLength(4)
     expect([...MAJOR_IDS, ...MINOR_IDS].sort()).toEqual(CARDS.map((c) => c.id).sort())
   })
 
@@ -71,5 +71,13 @@ describe('cards（第 13.1 節）', () => {
       expect(barks, c.id).toHaveLength(3)
       for (const b of barks) expect(b.length, c.id).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('吃：甜食／鹹食（2026-09-18 Cross 需求）', () => {
+  it('eat 多一個「想吃」欄位，預設都可以', () => {
+    const f = CARD_BY_ID.eat.intake.find((x) => x.key === 'taste')!
+    expect(f.options).toEqual(['鹹食', '甜食', '都可以'])
+    expect(f.default).toBe('都可以')
   })
 })

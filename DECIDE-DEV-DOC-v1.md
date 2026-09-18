@@ -204,19 +204,20 @@ export interface WeeklyReport {
 
 ---
 
-## 6. 七張模組卡
+## 6. 八張模組卡
 
 | id | intake | Places | promptHint（給 Claude） | reissue | stop 可用 |
 |---|---|---|---|---|---|
-| eat | 忌口 chips：不辣／不吃牛／素／都可以 | ✅ `restaurant`，半徑 800m 步行 | 從候選店挑**一家**，big=店名，steps 含「點什麼」與「幾分鐘內吃完」；用 recentOrders 講這週吃了幾次什麼 | 店關了 | ✗ |
+| eat | 忌口 chips：不辣／不吃牛／素／都可以；想吃 chips：鹹食／甜食／都可以 | ✅ `restaurant`，半徑 800m 步行；選甜食改查 `bakery`／`cafe`／`ice_cream_shop` | 從候選店挑**一家**，big=店名，steps 含「點什麼」與「幾分鐘內吃完」；用 recentOrders 講這週吃了幾次什麼 | 店關了 | ✗ |
 | go | 交通 chips：走路／捷運／計程車／開車；可接受 chips：15／30／60 分 | ✗（MVP 用 Claude 常識 + 定位城市；v2 接 Places） | big=地點，steps 含怎麼去、到那裡做一件事、回家；符合時間帶（晚上不排早市） | 路封了 | ✗ |
 | attend | 場合 chips：飯局／公司聚會／朋友生日／婚禮；熟識 stars 1–5 | ✗ | 規則：★≤2 且非婚禮 → verdict=stop（不去，替代=傳一句話）；其餘 do。steps 必含到達時間、dress code 等級、可離場時間 | null | ✅ |
 | rest | 無 | ✅ `cafe`，半徑 500m | big=店名，steps：點什麼、坐幾分、手機面朝下 | 店關了 | ✗ |
 | sleep | 起床 chips：06:30／07:30／08:30 | ✗ | big=「HH:MM 熄燈」= 起床−8h；steps 含充電器位置 | null | ✗ |
 | reply | 對象 chips：老闆／同事／朋友／陌生人 | ✗ | 永遠 do；big=「現在回。N 句。」；steps 第一句答案、第二句時程 | null | ✗ |
 | buy | 金額 chips：500 以下／500–1,500／1,500–3,000 | ✗ | 預設 stop（不買）+ 72 小時規則；若 recentOrders 顯示 72 小時前已報告過同類 → do | null | ✅ |
+| travel | 區域 chips：日韓／東南亞／歐洲／美洲／都可以；天數 chips：3 天／5 天／7 天以上 | ✗ | 只決定國家，big=國家名；不談錢、不適用大事規則 5，永遠 do；steps：訂機票期限、出發前唯一一件事、回國日 | 換一國 | ✗ |
 
-首頁排列：4 大磁貼（吃／去／赴／歇）+ 3 小鍵（sleep／reply／buy）。
+首頁排列：4 大磁貼（吃／去／赴／歇）+ 4 小鍵（sleep／reply／buy／travel）。
 
 ---
 

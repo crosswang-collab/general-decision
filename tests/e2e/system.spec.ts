@@ -45,7 +45,7 @@ test('頁面不得橫向捲動', async ({ page }) => {
   expect(scrollable).toBe(false)
 })
 
-test('高度 < 700px：3 小鍵變成一列橫向捲動，不換行', async ({ page }) => {
+test('高度 < 700px：4 小鍵變成一列橫向捲動，不換行', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 650 })
   await page.goto('/')
   const minor = page.locator('.minor')
@@ -56,7 +56,7 @@ test('高度 < 700px：3 小鍵變成一列橫向捲動，不換行', async ({ p
   expect(wrap).toBe('nowrap')
   expect(overflowX).toBe('auto')
 
-  // 三顆鍵仍在同一列
+  // 四顆鍵仍在同一列
   const tops = await page.locator('.minor button').evaluateAll((els) =>
     els.map((e) => Math.round(e.getBoundingClientRect().top)))
   expect(new Set(tops).size).toBe(1)

@@ -44,7 +44,7 @@
 |---|---|
 | 形態 | PWA（Vite + React + TypeScript），手機優先 |
 | 部署 | Vercel（前端 + 2 支 serverless function 藏 key） |
-| 決策引擎 | Claude API，模型 `claude-sonnet-5`，強制 JSON 輸出 |
+| 決策引擎 | Claude API，口令 `/api/order` 預設 `claude-haiku-4-5`（速度優先，環境變數 `ORDER_MODEL` 可換回 `claude-sonnet-5`）；週報 `/api/weekly` 用 `claude-sonnet-5`。強制 JSON 輸出 |
 | 店家資料 | Google Places API (New) Nearby Search，只在 吃／歇 使用 |
 | 資料儲存 | 手機本機（IndexedDB via `idb-keyval`），零後端 DB |
 | 角色 | 教官／值星班長，軍教片口吻，三段火力，預設中檔 |

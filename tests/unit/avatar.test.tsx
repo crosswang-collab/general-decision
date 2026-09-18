@@ -31,16 +31,30 @@ describe('avatar（第 12 節 S3：3×4 表情不拋錯）', () => {
     }
   })
 
+  // 下面三條斷言的色值在階段 A 換過：舊色稿的 19 個 hex 沒有一個在 NES 色盤內（DEV-PLAN-2 附錄 A-4），
+  // 改的理由是「正確答案變了」，不是為了讓測試變綠。新色值是否合法由 palette-guard.test.ts 獨立把關。
   it('onDark 時不畫米白底（放在梗圖卡上）', () => {
     expect(avatarSvg(1, 'bark', true)).toContain('fill="none"')
-    expect(avatarSvg(1, 'bark', false)).toContain('url(#bgG)')
+    expect(avatarSvg(1, 'bark', false)).toContain('fill="#FCE0A8"')
+  })
+
+  it('NES 沒有漸層，底色與制服一律扁平填色', () => {
+    for (const lv of LEVELS) {
+      expect(avatarSvg(lv, 'idle')).not.toContain('Gradient')
+      expect(avatarSvg(lv, 'idle')).not.toContain('url(#')
+    }
   })
 
   it('各階專屬配件：值星帶（lv1）、哨子與白髮線（lv2）、歪帽與冒汗（lv0）', () => {
-    expect(avatarSvg(1, 'idle')).toContain('#C0392B') // 值星帶
-    expect(avatarSvg(2, 'idle')).toContain('#8C8C8C') // 白髮線
+    expect(avatarSvg(1, 'idle')).toContain('#F83800') // 值星帶
+    expect(avatarSvg(2, 'idle')).toContain('#BCBCBC') // 白髮線
     expect(avatarSvg(0, 'idle')).toContain('rotate(-7 60 36)') // 歪帽
-    expect(avatarSvg(0, 'idle')).toContain('#5DADE2') // 冒汗
+    expect(avatarSvg(0, 'idle')).toContain('#3CBCFC') // 冒汗
+  })
+
+  it('punish 在梗圖卡上用 currentColor，跟著卡片文字色走（卡底改中性後不能寫死白色）', () => {
+    expect(avatarSvg(1, 'punish', true)).toContain('stroke="currentColor"')
+    expect(avatarSvg(1, 'punish', false)).not.toContain('currentColor')
   })
 
   it('第 14 節資產路徑格式正確', () => {

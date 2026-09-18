@@ -10,3 +10,10 @@
 - [CSS] 大字級時 flex 子容器可能收縮而讓文字延伸到下一區 — 區塊不收縮、卡片內容列保留 min-content。
 - [圖片] DOM 字串回傳有長度上限，完整 data URL 會被截斷 — 保存時分段讀取已生成的 DOM 圖片來源，驗證PNG尺寸與實際解碼。
 - [依賴] npm ci 的 whatwg-encoding deprecation 來自既有間接依賴 — 無新增依賴，當次 audit 0 vulnerabilities；不在視覺改版中擴大套件更新範圍。
+- [CSS·2026-09-18] 自訂屬性有「兩個」坑，只躲一個不夠。已知的第一個是**按最近的祖先解析，不是按 specificity**
+  （`:root` 寫的值對 `main[data-level]` 沒有作用，必須在 media query 裡再寫一次 `main[data-level]`）。
+  第二個是**同 specificity 由後者勝**：深色的 `main[data-level]{--meme-edge}` 若寫在淺色的 `main[data-level]` 之前，
+  會被後面的淺色宣告整個蓋掉，深色永遠吃到淺色的值。兩條規則長得一樣、都沒有警告，靠讀 CSS 看不出來。
+  這次是 `tests/e2e/palette.spec.ts` 量渲染後的 `getComputedStyle` 才抓到——而且光驗「對比 ≥ 3:1」還抓不到，
+  因為錯誤的值剛好也過門檻，是把每層的預期色值寫死才現形。結論：色盤類的斷言要驗「值」，不要只驗「門檻」。
+

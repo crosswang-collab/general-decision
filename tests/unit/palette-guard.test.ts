@@ -34,10 +34,7 @@ describe('色盤守門（A-4）', () => {
     expect(bad).toEqual([])
   })
 
-  // src/avatar.tsx 的 19 個硬編色是 8-bit 改版前的向量色稿，目前零個在 NES 表內（DEV-PLAN-2 附錄 A-4）。
-  // 這是階段 A 的連帶項，色值要等色盤定案後一起換；在那之前用 .fails 把現況釘住：
-  // 一旦有人把 avatar.tsx 換成 NES 色，這條會反過來失敗，提醒把 .fails 拿掉、升級成真正的守門。
-  it.fails('src/avatar.tsx 的硬編色在 NES 色盤內（階段 A 待辦，目前預期不通過）', () => {
+  it('src/avatar.tsx 的硬編色全部在 NES 色盤內（階段 A 已換色稿）', () => {
     const bad = [...new Set(hexes(read('src/avatar.tsx')))].filter((h) => !NES.has(h))
     expect(bad).toEqual([])
   })

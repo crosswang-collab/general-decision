@@ -1,7 +1,7 @@
 // 資料模型 — DECIDE-DEV-DOC-v1.md 第 5 節，照抄。
 
 export type Level = 0 | 1 | 2 // 菜鳥班長 / 值星班長 / 士官長
-export type ModuleId = 'eat' | 'go' | 'attend' | 'rest' | 'sleep' | 'reply' | 'buy'
+export type ModuleId = 'eat' | 'go' | 'attend' | 'rest' | 'sleep' | 'reply' | 'buy' | 'travel'
 
 export interface IntakeField {
   key: string // 'diet' | 'transport' | 'minutes' | 'occasion' | 'stars' ...
@@ -13,7 +13,7 @@ export interface IntakeField {
 
 export interface ModuleCard {
   id: ModuleId
-  title: string // 吃 / 去 / 赴 / 歇 / 幾點睡 / 這訊息現在回嗎 / 買不買
+  title: string // 吃 / 去 / 赴 / 歇 / 幾點睡 / 這訊息現在回嗎 / 買不買 / 飛
   subtitle: string
   intake: IntakeField[]
   needsPlaces: boolean // eat, rest = true

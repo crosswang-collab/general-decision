@@ -5,7 +5,7 @@ import { OFFICER_BY_LEVEL } from './officers.ts'
 import { Avatar } from './avatar.tsx'
 import { InsigniaMark } from './insignia.tsx'
 import { MemeCard, StepsCard } from './meme.tsx'
-import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap } from './api.ts'
+import { ApiError, ERROR_TEXT, GEO_DENIED_LINE, getLocation, requestOrder, underPlacesCap, type GeoResult } from './api.ts'
 import {
   allEntries, entriesInWeek, getWeekly, groupByDay, makeEntry, putEntry,
   recentOrders, saveWeekly, stats, timeLabel, weeklyDue, weekStartOf,
@@ -88,8 +88,12 @@ export function App() {
 
   const cycleOfficer = useCallback(() => setLevel((l) => ((l + 1) % 3) as Level), [])
 
+  // 加速：定位常常要等 1–5 秒。進 intake 時就開始要，使用者挑選項的時間拿來等 GPS，按下去時通常已經有了。
+  const geoAhead = useRef<Promise<GeoResult> | null>(null)
+
   const openIntake = useCallback((id: ModuleId) => {
     const c = CARD_BY_ID[id]
+    geoAhead.current = c.needsPlaces && underPlacesCap() ? getLocation() : null
     setCard(c)
     setChoices(Object.fromEntries(c.intake.map((f) => [f.key, f.default])))
     setOrder(null)
@@ -108,7 +112,8 @@ export function App() {
     // 第 8 節：需要 Places 且今天還沒超過上限，才去要定位。
     let loc: { lat: number; lng: number } | undefined
     if (c.needsPlaces && underPlacesCap()) {
-      const geo = await getLocation()
+      const geo = await (geoAhead.current ?? getLocation())
+      geoAhead.current = null // 用過即丟；換口令會重新要一次（maximumAge 120s，通常瞬間回）
       loc = geo.loc
       setGeoDenied(geo.denied)
     } else {

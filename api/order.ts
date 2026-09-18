@@ -4,7 +4,7 @@ import { CARD_BY_ID } from '../src/cards.ts'
 import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
 import { enforceRules } from '../src/rules.ts'
-import { FIELD_MASK, MAX_RESULTS, placeMapUrl, toCandidates, type RawPlace } from '../src/places.ts'
+import { FIELD_MASK, MAX_RESULTS, placeMapUrl, placesTypesFor, toCandidates, type RawPlace } from '../src/places.ts'
 import type { Order, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
@@ -39,11 +39,13 @@ async function handler(request: Request): Promise<Response> {
   const now = new Date(req.now)
 
   // ── Places（只在 eat / rest，且有定位時）─────────────────────────
+  const t0 = Date.now()
+  let placesMs = 0
   let places: PlaceCandidate[] = []
   let placesCalled = 0
   if (card.needsPlaces && req.loc) {
     const radius = card.placesQuery?.radiusByTransport?.default ?? 800
-    const types = card.placesQuery?.includedTypes ?? []
+    const types = placesTypesFor(card.placesQuery?.includedTypes ?? [], req.choices ?? {})
     try {
       const raw = await fetchPlaces(req.loc, radius, types)
       placesCalled = 1
@@ -55,14 +57,22 @@ async function handler(request: Request): Promise<Response> {
       console.warn(`[places] fail：${(e as Error).message}`)
       places = []
     }
+    placesMs = Date.now() - t0
   }
 
   // ── Claude ────────────────────────────────────────────────────
   const { system, user } = buildOrderPrompt(req, places)
   try {
+    const t1 = Date.now()
     const text = await callClaude(system, user, 900)
+    const claudeMs = Date.now() - t1
+    // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪。
+    console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms module=${req.module} level=${req.level}`)
     const order = enforceRules(parseOrder(text), req.module, req.choices ?? {}, now, req.recentOrders)
-    return json(withPlace(order, places), 200, { 'x-places-calls': String(placesCalled) })
+    return json(withPlace(order, places), 200, {
+      'x-places-calls': String(placesCalled),
+      'x-timing': `places=${placesMs};claude=${claudeMs}`,
+    })
   } catch (e) {
     const status = e instanceof ParseError ? 502 : (e as UpstreamError)?.status ?? 502
     return json(

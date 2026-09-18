@@ -1,4 +1,4 @@
-// 七張模組卡 — DECIDE-DEV-DOC-v1.md 第 6 節。
+// 八張模組卡 — DECIDE-DEV-DOC-v1.md 第 6 節。
 import type { ModuleCard, ModuleId } from './types.ts'
 
 export const CARDS: ModuleCard[] = [
@@ -8,11 +8,14 @@ export const CARDS: ModuleCard[] = [
     subtitle: '中午、晚上，吃什麼',
     intake: [
       { key: 'diet', label: '忌口', type: 'chips', options: ['不辣', '不吃牛', '素', '都可以'], default: '都可以' },
+      { key: 'taste', label: '想吃', type: 'chips', options: ['鹹食', '甜食', '都可以'], default: '都可以' },
     ],
     needsPlaces: true,
+    // 甜食時伺服器端改查 bakery / cafe / ice_cream_shop（src/places.ts placesTypesFor）。
     placesQuery: { includedTypes: ['restaurant'], radiusByTransport: { default: 800 } },
     promptHint:
       '從候選店挑一家，meme.big = 店名（≤10 字，太長就用店家慣稱）。steps 必須含「點什麼」與「幾分鐘內吃完」。' +
+      '使用者選「甜食」時候選店是甜點／麵包／咖啡店，點的東西要是甜的；選「鹹食」就不得點甜點當正餐。' +
       '若 recentOrders 裡本週已有 eat，請在 meme.top 或 meme.bot 點出這週第幾次、吃了什麼，語氣照火力層。',
     reissueLabel: '店關了',
     stopVerdictAllowed: false,
@@ -103,15 +106,32 @@ export const CARDS: ModuleCard[] = [
     reissueLabel: null,
     stopVerdictAllowed: true,
   },
+  {
+    id: 'travel',
+    title: '飛',
+    subtitle: '出國，去哪個國家',
+    intake: [
+      { key: 'region', label: '區域', type: 'chips', options: ['日韓', '東南亞', '歐洲', '美洲', '都可以'], default: '都可以' },
+      { key: 'days', label: '天數', type: 'chips', options: ['3 天', '5 天', '7 天以上'], default: '5 天' },
+    ],
+    needsPlaces: false,
+    promptHint:
+      '只決定去哪一個國家（可附一座城市），meme.big = 國家名（≤10 字）。這張卡不決定預算、不談錢，不適用大事規則 5，永遠 verdict = "do"。' +
+      '國家必須符合使用者選的區域；天數要對得上（3 天不排歐美長程）。不得推薦有旅遊警示或需要複雜簽證的地方。' +
+      'steps 三條：今天幾點前訂機票、出發前唯一要辦的一件事（護照效期／簽證／換匯，挑一件）、回國日期。' +
+      '若 recentOrders 裡已有 travel，換一個國家。',
+    reissueLabel: '換一國',
+    stopVerdictAllowed: false,
+  },
 ]
 
 export const CARD_BY_ID: Record<ModuleId, ModuleCard> = Object.fromEntries(
   CARDS.map((c) => [c.id, c]),
 ) as Record<ModuleId, ModuleCard>
 
-/** 首頁排列：4 大磁貼 + 3 小鍵（第 6 節末）。 */
+/** 首頁排列：4 大磁貼 + 4 小鍵（第 6 節末）。 */
 export const MAJOR_IDS: ModuleId[] = ['eat', 'go', 'attend', 'rest']
-export const MINOR_IDS: ModuleId[] = ['sleep', 'reply', 'buy']
+export const MINOR_IDS: ModuleId[] = ['sleep', 'reply', 'buy', 'travel']
 
 /**
  * 點名台詞：每張卡 × 三段火力。介面 ModuleCard 由第 5 節鎖定，故另存一張表。
@@ -137,6 +157,11 @@ export const MODULE_BARKS: Record<ModuleId, [string, string, string]> = {
     '要、要休息喔？那…那就去吧。',
     '不用點名。班長知道你在哪，坐多久了心裡有數。',
     '坐了三個半小時，屁股都長在椅子上了。起來！',
+  ],
+  travel: [
+    '出、出國喔…想去哪一區？幾天？',
+    '出國。區域、天數，講。國家班長挑。',
+    '護照拿出來。區域！天數！國家我定，不接受討價還價。',
   ],
   sleep: [
     '明天…幾點起床？',

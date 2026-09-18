@@ -4,7 +4,7 @@ import { CARD_BY_ID } from '../src/cards.ts'
 import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
 import { enforceRules, isNonAnswer } from '../src/rules.ts'
-import { FIELD_MASK, MAX_RESULTS, placeMapUrl, placesSearchFor, toCandidates, type PlacesSearch, type RawPlace } from '../src/places.ts'
+import { FETCH_COUNT, FIELD_MASK, WIDEN_FACTOR, matchPlace, placeMapUrl, placesSearchFor, toCandidates, type PlacesSearch, type RawPlace } from '../src/places.ts'
 import type { Order, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
@@ -42,26 +42,38 @@ async function handler(request: Request): Promise<Response> {
   const card = CARD_BY_ID[req.module]
   const now = new Date(req.now)
 
-  // ── Places（只在 eat / rest，且有定位時）─────────────────────────
+  // ── Places（eat / rest 必須有真店；沒有就是失敗，不再用類別降級）──────
+  // Cross 2026-09-18：只講「甜點店／小吃店」一律視為禁止；必須是地圖上正在營業或即將營業、評價數多且正面的真店。
   const t0 = Date.now()
   let placesMs = 0
   let places: PlaceCandidate[] = []
   let placesCalled = 0
-  if (card.needsPlaces && req.loc) {
+  if (card.needsPlaces) {
+    if (!req.loc) {
+      return json({ error: 'no_location', message: '不報座標，班長就點不了店。開定位再報告。' }, 400)
+    }
     const search = placesSearchFor(card, req.choices ?? {})
-    try {
-      const raw = await fetchPlaces(req.loc, search)
-      placesCalled = 1
-      places = toCandidates(raw, req.loc, now, req.exclude ?? [])
-      const what = search.kind === 'text' ? `text="${search.textQuery}"` : `types=${search.includedTypes.join('|')}`
-      console.info(`[places] ok ${what} r=${search.radius} raw=${raw.length} candidates=${places.length}`)
-    } catch (e) {
-      // 第 8 節：Places 掛掉就降級，永遠有口令出來。
-      // 但一定要留一行 log：之前這裡靜靜吞掉，「Places 到底有沒有通」從外面完全看不出來。
-      console.warn(`[places] fail：${(e as Error).message}`)
-      places = []
+    const what = search.kind === 'text' ? `text="${search.textQuery}"` : `types=${search.includedTypes.join('|')}`
+    // 第一圈半徑查不到 → 放大 2.5 倍再查一次，之後才算失敗。
+    for (const radius of [search.radius, Math.round(search.radius * WIDEN_FACTOR)]) {
+      try {
+        const raw = await fetchPlaces(req.loc, { ...search, radius })
+        placesCalled++
+        places = toCandidates(raw, req.loc, now, req.exclude ?? [])
+        console.info(`[places] ok ${what} r=${radius} raw=${raw.length} candidates=${places.length}`)
+      } catch (e) {
+        console.warn(`[places] fail ${what} r=${radius}：${(e as Error).message}`)
+      }
+      if (places.length) break
     }
     placesMs = Date.now() - t0
+    if (!places.length) {
+      return json(
+        { error: 'no_places', message: '附近查不到營業中的店。換個地方再報告。' },
+        502,
+        { 'x-places-calls': String(placesCalled), 'x-timing': `places=${placesMs};claude=0` },
+      )
+    }
   }
 
   // ── Claude ────────────────────────────────────────────────────
@@ -69,19 +81,33 @@ async function handler(request: Request): Promise<Response> {
   try {
     const t1 = Date.now()
     let { text, outputTokens } = await callClaude(system, user, 900)
-    // 模型推掉不答（「大事不受理／去找連長」）→ 重打一次，把它的推辭指名禁止。兩次都推 → 502，前端顯示「班長在開會」。
-    // 不吐口令是不被允許的（Cross 2026-09-18）；prompt 規則 5 已改成禁止，這裡是保證。
-    if (isNonAnswer(parseOrder(text))) {
-      console.warn(`[nonanswer] module=${req.module} 模型推掉不答，重打一次`)
-      const retry = await callClaude(system, `${user}\n\n上一次你回了「大事不受理／去找連長」。這是小事，不准推。重來，必須給可執行口令，verdict 用 "do"。`, 900)
-      if (isNonAnswer(parseOrder(retry.text))) throw upstream(502, '模型兩次都不給口令')
+    let parsed = parseOrder(text)
+    // 兩種不合格：(a) 推掉不答（「大事不受理／去找連長」）；(b) 該挑店的卡沒挑清單裡的真店（只講類別、編店名）。
+    // 各自重打一次，把問題指名。不吐口令、只講類別都不被允許（Cross 2026-09-18）；prompt 是要求，這裡是保證。
+    const complaint = (o: Order): string | null => {
+      if (isNonAnswer(o)) return '上一次你回了「大事不受理／去找連長」。這是小事，不准推。重來，必須給可執行口令，verdict 用 "do"。'
+      if (card.needsPlaces && !matchPlace(o.place, places)) return '上一次你沒有從候選清單挑出一家真店（只講類別或編了店名都不算）。重來：place.id 與 place.name 照清單填，meme.big 就是那家店名。'
+      return null
+    }
+    const why = complaint(parsed)
+    if (why) {
+      console.warn(`[retry] module=${req.module} ${isNonAnswer(parsed) ? 'nonanswer' : 'noplace'}，重打一次`)
+      const retry = await callClaude(system, `${user}\n\n${why}`, 900)
       text = retry.text
       outputTokens += retry.outputTokens
+      parsed = parseOrder(text)
+      if (isNonAnswer(parsed)) throw upstream(502, '模型兩次都不給口令')
+      // 第二次還是沒挑到真店 → 伺服器直接指定評價最高的那家，不讓類別答案流出去。
+      if (card.needsPlaces && !matchPlace(parsed.place, places)) {
+        const top = places[0]!
+        console.warn(`[place] forced module=${req.module} → ${top.name}`)
+        parsed = { ...parsed, meme: { ...parsed.meme, big: top.name.slice(0, 10) }, place: { id: top.id, name: top.name } }
+      }
     }
     const claudeMs = Date.now() - t1
     // 加速方案第一步是量：每一次都留一行，Vercel log 直接看時間花在哪、模型吐了幾個 token。
     console.info(`[timing] places=${placesMs}ms claude=${claudeMs}ms total=${Date.now() - t0}ms model=${MODEL} out=${outputTokens} module=${req.module} level=${req.level}`)
-    const order = enforceRules(parseOrder(text), req.module, req.choices ?? {}, now, req.recentOrders)
+    const order = enforceRules(parsed, req.module, req.choices ?? {}, now, req.recentOrders)
     return json(withPlace(order, places), 200, {
       'x-places-calls': String(placesCalled),
       'x-timing': `places=${placesMs};claude=${claudeMs};model=${MODEL}`,
@@ -111,8 +137,7 @@ export default { fetch: handler }
  * 比不中 → 原樣回傳、不得產生 mapUrl。模型自己寫的 mapUrl 已在 enforceRules() 被丟掉。
  */
 export function withPlace(order: Order, places: PlaceCandidate[]): Order {
-  if (!order.place) return order
-  const match = places.find((p) => p.id === order.place!.id || p.name === order.place!.name)
+  const match = matchPlace(order.place, places)
   if (!match) return order
   return {
     ...order,
@@ -186,10 +211,11 @@ async function fetchPlaces(loc: { lat: number; lng: number }, search: PlacesSear
   if (!key) throw new Error('GOOGLE_PLACES_KEY 未設定')
 
   const circle = { center: { latitude: loc.lat, longitude: loc.lng }, radius: search.radius }
+  // 不在這裡用 openNow 過濾：「60 分內開門」的店也要留，篩選在 toCandidates()。
   const body = JSON.stringify(
     search.kind === 'text'
-      ? { textQuery: search.textQuery, pageSize: MAX_RESULTS, openNow: true, rankPreference: 'DISTANCE', languageCode: 'zh-TW', locationBias: { circle } }
-      : { includedTypes: search.includedTypes, maxResultCount: MAX_RESULTS, languageCode: 'zh-TW', locationRestriction: { circle } },
+      ? { textQuery: search.textQuery, pageSize: FETCH_COUNT, rankPreference: 'DISTANCE', languageCode: 'zh-TW', locationBias: { circle } }
+      : { includedTypes: search.includedTypes, maxResultCount: FETCH_COUNT, languageCode: 'zh-TW', locationRestriction: { circle } },
   )
 
   for (let attempt = 0; attempt < 2; attempt++) {

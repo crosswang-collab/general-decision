@@ -9,7 +9,11 @@ export interface PlaceCandidate {
   name: string
   walkMin?: number
   openUntil?: string
+  /** 尚未開門但 60 分內會開：HH:MM。 */
+  opensAt?: string
   primaryType?: string
+  rating?: number
+  ratingCount?: number
 }
 
 export const ORDER_SYSTEM_PROMPT = `你是台灣 1990–2000 年代軍教片裡的班長。三種火力，由 level 決定：
@@ -23,7 +27,7 @@ level 2「士官長 老郭」：毒舌、比喻狠、不留情。「我看過的
 3. log（登記）不罵、不誇：只描述時間、口令、使用者做了什麼。例：「你去了你不想去的地方，而且準時。」
 4. 不解釋、不道歉、不給第二選項。verdict=stop 時，steps 第一條就是替代行為（且只有一個）。
 5. 這八張卡全部是小事，一律要給可執行的口令。禁止回「大事不受理」、禁止叫使用者去找連長或任何人、禁止用「這不是班長管的」之類的話推掉。verdict:'stop' 只有在【已判定】明講時才出現（赴、買不買）。
-6. 只能推薦 places 陣列裡的店（若有提供）。不得編造店名。places 為空 → 依 promptHint 用類型代替，並在 meme.bot 註明「店家資料暫時拿不到」。
+6. 有候選店家時，必須從清單挑出**一家真店**：place.id、place.name 照清單填，meme.big 就是那家店名。禁止只講類別（「甜點店」「小吃店」「附近的咖啡廳」一律不算回答）、禁止編造店名、禁止挑清單外的店。優先挑評價數多且分數高、且正在營業的；註明「HH:MM 開」的店要在 steps 寫清楚幾點開門。
 7. 輸出只有 Order JSON，不加任何前後文、不加 markdown fence。
 8. 一律用台灣的繁體中文與台灣生活用語。禁止中國用語（質量／視頻／信息／屏幕／默認／用戶／激活／軟件／網絡／出租車／自行車／盒飯／早點／地鐵）。軍事用語只用國軍的（連、排、班、值星、出操、寢室、輔導長），不得使用解放軍編制用語（指導員、政委）。
 
@@ -51,8 +55,8 @@ export function buildOrderPrompt(req: OrderRequest, places: PlaceCandidate[]): {
     req.loc ? `使用者位置：${req.loc.lat},${req.loc.lng}${req.loc.label ? `（${req.loc.label}）` : ''}` : '使用者沒有給定位。依規則 6 降級，不得編造店名與距離。',
     `使用者的選擇：${JSON.stringify(req.choices, null, 0)}`,
     places.length
-      ? `候選店家（只能從這裡挑一家，place.id 要照填）：\n${places.map((p, i) => `${i + 1}. id=${p.id} 名稱=${p.name}${p.walkMin ? ` 步行${p.walkMin}分` : ''}${p.openUntil ? ` 營業到${p.openUntil}` : ''}`).join('\n')}`
-      : card.needsPlaces ? '候選店家：（空）— 店家資料暫時拿不到，依規則 6 降級。' : '',
+      ? `候選店家（已依評價排序，只能從這裡挑一家，place.id 與 place.name 要照填）：\n${places.map((p, i) => `${i + 1}. id=${p.id} 名稱=${p.name}${p.rating ? ` 評分${p.rating}（${p.ratingCount ?? 0}則）` : ' 無評分'}${p.walkMin ? ` 步行${p.walkMin}分` : ''}${p.opensAt ? ` ${p.opensAt} 開` : p.openUntil ? ` 營業到${p.openUntil}` : ' 營業中'}`).join('\n')}`
+      : '',
     req.recentOrders.length
       ? `近 7 天口令：\n${req.recentOrders.map((r) => `・${r.at} ${r.module} ${r.big}`).join('\n')}`
       : '近 7 天沒有紀錄。',

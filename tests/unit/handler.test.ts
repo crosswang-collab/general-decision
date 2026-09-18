@@ -34,7 +34,8 @@ const post = (body: Partial<OrderRequest>) =>
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
-      module: 'eat', level: 1, choices: { diet: '都可以' },
+      // 2026-09-18 起 eat 沒定位是 400（見下），所以預設帶定位；要測沒定位就傳 loc: undefined。
+      module: 'eat', level: 1, choices: { diet: '都可以' }, loc: { lat: 25.033, lng: 121.5654 },
       now: '2026-09-11T12:40:00+08:00', recentOrders: [], ...body,
     }),
   })
@@ -84,22 +85,66 @@ describe('/api/order handler（第 12 節 S5）', () => {
     expect(claude).toHaveBeenCalledTimes(3) // 首次 + 兩次重試
   }, 15_000)
 
-  it('Places 掛掉仍然出得了口令（第 8 節降級）', async () => {
-    vi.stubGlobal('fetch', routed(
-      () => claudeOk(ORDER_JSON),
-      () => new Response('boom', { status: 500 }),
-    ))
-    const res = await handler(post({ loc: { lat: 25.033, lng: 121.5654 } }))
-    expect(res.status).toBe(200)
+  // 2026-09-18 斷言改了（Cross：只講類別一律視為失敗）。以下兩條原本是「降級仍出口令」，現在是明確的失敗碼。
+  it('Places 掛掉 → 兩個半徑都試過後回 502 no_places，不打 Claude', async () => {
+    const claude = vi.fn(() => claudeOk(ORDER_JSON))
+    vi.stubGlobal('fetch', routed(claude, () => new Response('boom', { status: 500 })))
+    const res = await handler(post({}))
+    expect(res.status).toBe(502)
+    expect((await res.json()).error).toBe('no_places')
+    expect(claude).not.toHaveBeenCalled()
   }, 15_000)
 
-  it('沒有定位 → 完全不打 Places，仍然 200（第 11 節定位被拒）', async () => {
+  it('沒有定位 → 400 no_location，不打 Places 也不打 Claude（吃／歇一定要真店）', async () => {
     const f = routed(() => claudeOk(ORDER_JSON))
     vi.stubGlobal('fetch', f)
     const res = await handler(post({ loc: undefined }))
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('no_location')
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('第一圈沒有營業中的店 → 半徑放大再查一次，第二圈有就用第二圈', async () => {
+    const bodies: string[] = []
+    const places = vi.fn((init?: RequestInit) => {
+      bodies.push(String(init?.body ?? ''))
+      return bodies.length === 1
+        ? new Response(JSON.stringify({ places: [] }), { status: 200 })
+        : placesOk()
+    })
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).includes('anthropic') ? claudeOk(ORDER_JSON) : places(init)))
+    const res = await handler(post({}))
     expect(res.status).toBe(200)
-    expect(res.headers.get('x-places-calls')).toBe('0')
-    for (const call of f.mock.calls) expect(String(call[0])).not.toContain('googleapis')
+    expect(res.headers.get('x-places-calls')).toBe('2')
+    expect(JSON.parse(bodies[0]!).locationRestriction.circle.radius).toBe(800)
+    expect(JSON.parse(bodies[1]!).locationRestriction.circle.radius).toBe(2000)
+  })
+
+  it('模型只講類別、沒挑清單裡的店 → 重打一次；還是沒有 → 伺服器指定評價最高那家', async () => {
+    const category = JSON.stringify({
+      verdict: 'do', meme: { top: '去吃', big: '附近的小吃店', bot: 'x' }, steps: ['找一家小吃店。'], log: 'x',
+    })
+    const claude = vi.fn(() => claudeOk(category))
+    vi.stubGlobal('fetch', routed(claude))
+    const res = await handler(post({}))
+    expect(res.status).toBe(200)
+    expect(claude).toHaveBeenCalledTimes(2)
+    const order = (await res.json()) as Order
+    expect(order.meme.big).toBe('阿財魯肉飯')
+    expect(order.place?.id).toBe('p1')
+    expect(order.place?.mapUrl).toContain('query_place_id=p1')
+  })
+
+  it('模型第一次講類別、第二次挑對 → 用第二次的', async () => {
+    let n = 0
+    const claude = vi.fn(() => claudeOk(n++ === 0
+      ? JSON.stringify({ verdict: 'do', meme: { top: 'a', big: '甜點店', bot: 'c' }, steps: ['去。'], log: 'x' })
+      : ORDER_JSON))
+    vi.stubGlobal('fetch', routed(claude))
+    const res = await handler(post({}))
+    expect(claude).toHaveBeenCalledTimes(2)
+    expect(((await res.json()) as Order).place?.id).toBe('p1')
   })
 
   it('不需要 Places 的模組不打 Places', async () => {

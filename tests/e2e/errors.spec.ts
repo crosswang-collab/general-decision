@@ -1,16 +1,20 @@
-// 第 13.2 節 Error ×4：定位拒絕仍出口令；API 500→重試訊息與重試鍵；非法 JSON→同 500 路徑；離線→離線訊息且日記可開。
+// 第 13.2 節 Error ×4：定位拒絕→要座標（2026-09-18 起不再降級）；API 500→重試訊息與重試鍵；非法 JSON→同 500 路徑；離線→離線訊息且日記可開。
 import { expect, test } from '@playwright/test'
 import { FIXED_ORDER, mockOrder, mockOrderFailure } from './fixtures.ts'
 
-test('① 定位被拒，仍然出得了口令，並顯示班長的話', async ({ page, context }) => {
+// 2026-09-18 斷言改了：Cross 規定吃／歇只能點地圖上的真店，不准用類別糊過去。
+// 沒定位就點不了店，所以定位被拒 → 錯誤畫面要座標 + 重試鍵，而且不打 API（mock 沒被叫到）。
+test('① 定位被拒 → 班長要座標，不打 API', async ({ page, context }) => {
   await context.clearPermissions() // 不給定位權限
-  await mockOrder(page)
+  let called = 0
+  await page.route('**/api/order', async (route) => { called++; await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(FIXED_ORDER) }) })
   await page.goto('/')
   await page.locator('[data-card="eat"]').click()
   await page.getByRole('button', { name: '是！班長' }).click()
-  await expect(page.locator('[data-screen="cmd"]')).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByTestId('meme-big')).toHaveText(FIXED_ORDER.meme.big)
-  await expect(page.getByTestId('geo-denied')).toHaveText('不報座標？行，班長用常識。')
+  await expect(page.locator('[data-screen="error"]')).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByTestId('error-line')).toContainText('不報座標，班長就點不了店。開定位再報告。')
+  await expect(page.getByTestId('retry')).toBeVisible()
+  expect(called).toBe(0)
 })
 
 test('② API 500 → 班長在開會 + 重試鍵，重試後回到口令', async ({ page }) => {

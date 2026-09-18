@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseOrder, ParseError } from '../../src/orderParse.ts'
 import { attendVerdict, buyVerdict, enforceRules, isNonAnswer, lightsOut } from '../../src/rules.ts'
-import { closingTime, toCandidates, walkMinutes, type RawPlace } from '../../src/places.ts'
+import { closingTime, matchPlace, ratingScore, toCandidates, walkMinutes, type RawPlace } from '../../src/places.ts'
 import type { Order } from '../../src/types.ts'
 
 const ORDER = {
@@ -122,8 +122,48 @@ describe('Places 過濾（第 8 節）', () => {
     { id: 'p3', displayName: { text: '換口令換掉的店' }, currentOpeningHours: { openNow: true } },
   ]
 
-  it('只留 openNow', () => {
+  it('只留 openNow（沒有 nextOpenTime 的關門店一律掉）', () => {
     expect(toCandidates(raw, origin, now).map((p) => p.id)).not.toContain('p2')
+  })
+
+  // 2026-09-18 Cross：必須是正在營業或即將營業、評價數多且正面的真店。
+  it('60 分內開門的店留下並標 opensAt；兩小時後才開的掉', () => {
+    const soon: RawPlace[] = [
+      { id: 's1', displayName: { text: '半小時後開' }, currentOpeningHours: { openNow: false, nextOpenTime: '2026-09-11T05:10:00Z' } }, // 13:10 台北
+      { id: 's2', displayName: { text: '兩小時後開' }, currentOpeningHours: { openNow: false, nextOpenTime: '2026-09-11T06:40:00Z' } },
+    ]
+    const c = toCandidates(soon, origin, now)
+    expect(c.map((p) => p.id)).toEqual(['s1'])
+    expect(c[0]!.opensAt).toBe('13:10')
+    expect(c[0]!.openUntil).toBeUndefined()
+  })
+
+  it('評價優先：貝氏平均把「5 星 3 則」壓到「4.4 星 800 則」後面；≥4.0 且 ≥10 則的有兩家以上就只留那些', () => {
+    expect(ratingScore(5, 3)).toBeLessThan(ratingScore(4.4, 800))
+    expect(ratingScore(undefined, undefined)).toBe(0)
+    const rated: RawPlace[] = [
+      { id: 'a', displayName: { text: '三則五星' }, currentOpeningHours: { openNow: true }, rating: 5, userRatingCount: 3 },
+      { id: 'b', displayName: { text: '八百則' }, currentOpeningHours: { openNow: true }, rating: 4.4, userRatingCount: 800 },
+      { id: 'c', displayName: { text: '普通' }, currentOpeningHours: { openNow: true }, rating: 4.1, userRatingCount: 40 },
+      { id: 'd', displayName: { text: '差評' }, currentOpeningHours: { openNow: true }, rating: 3.2, userRatingCount: 200 },
+    ]
+    expect(toCandidates(rated, origin, now).map((p) => p.id)).toEqual(['b', 'c'])
+  })
+
+  it('好店不足兩家 → 不篩，全部照評價排序給模型', () => {
+    const few: RawPlace[] = [
+      { id: 'x', displayName: { text: '沒評分' }, currentOpeningHours: { openNow: true } },
+      { id: 'y', displayName: { text: '有評分' }, currentOpeningHours: { openNow: true }, rating: 3.9, userRatingCount: 50 },
+    ]
+    expect(toCandidates(few, origin, now).map((p) => p.id)).toEqual(['y', 'x'])
+  })
+
+  it('matchPlace：id 或店名對得上才算真店；類別答案對不上', () => {
+    const c = toCandidates(raw, origin, now)
+    expect(matchPlace({ id: 'p1', name: '亂寫' }, c)?.name).toBe('阿財魯肉飯')
+    expect(matchPlace({ id: '', name: '阿財魯肉飯' }, c)?.id).toBe('p1')
+    expect(matchPlace({ id: '', name: '附近的小吃店' }, c)).toBeUndefined()
+    expect(matchPlace(undefined, c)).toBeUndefined()
   })
 
   it('exclude 的店會被濾掉（換口令）', () => {

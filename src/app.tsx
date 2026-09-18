@@ -119,6 +119,12 @@ export function App() {
     } else {
       setGeoDenied(false)
     }
+    // 2026-09-18：吃／歇沒定位就不能點真店，不再「班長用常識」降級——直接說要座標。
+    if (c.needsPlaces && !loc) {
+      setError(new ApiError('no_location', ERROR_TEXT.no_location.line))
+      setScreen('error')
+      return
+    }
 
     try {
       const o = await requestOrder({

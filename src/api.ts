@@ -2,7 +2,7 @@
 import { DAILY_PLACES_CAP } from './places.ts'
 import type { Order, OrderRequest, WeeklyReport } from './types.ts'
 
-export type ApiErrorKind = 'offline' | 'rate_limited' | 'upstream' | 'bad_request'
+export type ApiErrorKind = 'offline' | 'rate_limited' | 'upstream' | 'bad_request' | 'no_location' | 'no_places'
 
 export class ApiError extends Error {
   kind: ApiErrorKind
@@ -19,6 +19,9 @@ export const ERROR_TEXT: Record<ApiErrorKind, { line: string; sub?: string }> = 
   rate_limited: { line: '班長在開會。30 秒後再報告。' },
   upstream: { line: '班長在開會。30 秒後再報告。' },
   bad_request: { line: '這個口令班長聽不懂。回報告。' },
+  // 2026-09-18：吃／歇一定要點真店。沒定位、附近沒開著的店 → 直接說，不用類別糊過去。
+  no_location: { line: '不報座標，班長就點不了店。開定位再報告。' },
+  no_places: { line: '附近查不到營業中的店。換個地方再報告。' },
 }
 
 export const GEO_DENIED_LINE = '不報座標？行，班長用常識。'
@@ -89,7 +92,11 @@ async function post<T>(path: string, body: unknown): Promise<{ data: T; res: Res
     throw new ApiError('offline', ERROR_TEXT.offline.line)
   }
   if (!res.ok) {
-    const kind: ApiErrorKind = res.status === 429 ? 'rate_limited' : res.status === 400 ? 'bad_request' : 'upstream'
+    let code = ''
+    try { code = String(((await res.json()) as { error?: string }).error ?? '') } catch { /* 沒 body 就看狀態碼 */ }
+    const kind: ApiErrorKind =
+      code === 'no_location' || code === 'no_places' ? code
+      : res.status === 429 ? 'rate_limited' : res.status === 400 ? 'bad_request' : 'upstream'
     throw new ApiError(kind, ERROR_TEXT[kind].line)
   }
   try {

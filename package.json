@@ -12,7 +12,8 @@
     "e2e": "playwright test tests/e2e",
     "e2e:shots": "playwright test tests/shots",
     "smoke": "node scripts/smoke-order.mjs",
-    "check:bundle": "node scripts/check-api-bundle.mjs"
+    "check:bundle": "node scripts/check-api-bundle.mjs",
+    "icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",

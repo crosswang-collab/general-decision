@@ -2,7 +2,11 @@
 
 > 建立日期：2026-09-17
 > 狀態：**待核**。本容器的出口網路封鎖 law.moj.gov.tw、mnd.gov.tw、president.gov.tw、zh.wikipedia.org，
-> 一手來源（服制條例附圖三）**已定位但未能開啟**。下列數量規則來自維基「中華民國國軍軍階」的搜尋摘要，多個鏡像一致，
+> 一手來源（服制條例附圖三）**已定位但未能開啟**。
+> 2026-09-18 再試一次，結果相同：`curl: (56) CONNECT tunnel failed, response 403`，proxy status 記為
+> `connect_rejected`／policy denial；另一個鏡像 `www.rootlaw.com.tw` 回 `Host not in allowlist`。
+> 確認是**組織 egress 政策**，不是暫時性故障，重試或換路徑都沒有意義。
+> 下列數量規則來自維基「中華民國國軍軍階」的搜尋摘要，多個鏡像一致，
 > 但依 DEV-PLAN-2 規則 10（不猜軍事常識），**動手畫之前要有人打開附圖確認**。
 
 ## 1. 士官六階的折槓數量（陸軍現行，待核）

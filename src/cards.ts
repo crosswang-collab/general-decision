@@ -56,11 +56,21 @@ export const CARDS: ModuleCard[] = [
     id: 'rest',
     title: '歇',
     subtitle: '現在，去哪喝一杯',
-    intake: [],
+    intake: [
+      { key: 'drink', label: '喝什麼', type: 'chips', options: ['咖啡', '酒吧', '居酒屋', '熱炒燒烤'], default: '咖啡' },
+    ],
     needsPlaces: true,
-    placesQuery: { includedTypes: ['cafe'], radiusByTransport: { default: 500 } },
+    // 咖啡以外三種是喝酒。居酒屋、熱炒攤沒有對應的 Places type，一律走 Text Search 用中文關鍵字查
+    // （src/places.ts placesSearchFor）。之前只查 cafe type、半徑 500m，正式站常常 raw=0。
+    placesQuery: {
+      includedTypes: ['cafe'],
+      radiusByTransport: { default: 800 },
+      textQuery: { key: 'drink', byOption: { 咖啡: '咖啡廳', 酒吧: '酒吧', 居酒屋: '居酒屋', 熱炒燒烤: '熱炒 燒烤' } },
+    },
     promptHint:
-      '從候選店挑一家，meme.big = 店名。steps 三條：點什麼、坐幾分鐘、手機面朝下。',
+      '從候選店挑一家，meme.big = 店名。' +
+      '選「咖啡」：steps 三條為點什麼、坐幾分鐘、手機面朝下。' +
+      '選「酒吧」「居酒屋」「熱炒燒烤」是喝酒：steps 三條為點什麼（含幾杯上限，最多兩杯）、幾點前離開、怎麼回家（不得開車騎車）。',
     reissueLabel: '店關了',
     stopVerdictAllowed: false,
   },
@@ -154,9 +164,9 @@ export const MODULE_BARKS: Record<ModuleId, [string, string, string]> = {
     '場合！星數！你猶豫的樣子我看過一百次。',
   ],
   rest: [
-    '要、要休息喔？那…那就去吧。',
-    '不用點名。班長知道你在哪，坐多久了心裡有數。',
-    '坐了三個半小時，屁股都長在椅子上了。起來！',
+    '喝、喝什麼？咖啡…還是酒？',
+    '喝什麼？咖啡還是酒，講。坐多久了班長心裡有數。',
+    '喝什麼！屁股都長在椅子上了，選一個，起來！',
   ],
   travel: [
     '出、出國喔…想去哪一區？幾天？',

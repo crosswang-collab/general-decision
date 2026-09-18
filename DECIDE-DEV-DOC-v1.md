@@ -45,7 +45,7 @@
 | 形態 | PWA（Vite + React + TypeScript），手機優先 |
 | 部署 | Vercel（前端 + 2 支 serverless function 藏 key） |
 | 決策引擎 | Claude API，口令 `/api/order` 預設 `claude-haiku-4-5`（速度優先，環境變數 `ORDER_MODEL` 可換回 `claude-sonnet-5`）；週報 `/api/weekly` 用 `claude-sonnet-5`。強制 JSON 輸出 |
-| 店家資料 | Google Places API (New) Nearby Search，只在 吃／歇 使用 |
+| 店家資料 | Google Places API (New)：吃 用 Nearby Search（照 type）、歇 用 Text Search（中文關鍵字），只在 吃／歇 使用 |
 | 資料儲存 | 手機本機（IndexedDB via `idb-keyval`），零後端 DB |
 | 角色 | 教官／值星班長，軍教片口吻，三段火力，預設中檔 |
 | 否定命令 | 給且只給一個替代（買不買→「不買，72 小時後再報告」是命令本體） |
@@ -211,7 +211,7 @@ export interface WeeklyReport {
 | eat | 忌口 chips：不辣／不吃牛／素／都可以；想吃 chips：鹹食／甜食／都可以 | ✅ `restaurant`，半徑 800m 步行；選甜食改查 `bakery`／`cafe`／`ice_cream_shop` | 從候選店挑**一家**，big=店名，steps 含「點什麼」與「幾分鐘內吃完」；用 recentOrders 講這週吃了幾次什麼 | 店關了 | ✗ |
 | go | 交通 chips：走路／捷運／計程車／開車；可接受 chips：15／30／60 分 | ✗（MVP 用 Claude 常識 + 定位城市；v2 接 Places） | big=地點，steps 含怎麼去、到那裡做一件事、回家；符合時間帶（晚上不排早市） | 路封了 | ✗ |
 | attend | 場合 chips：飯局／公司聚會／朋友生日／婚禮；熟識 stars 1–5 | ✗ | 規則：★≤2 且非婚禮 → verdict=stop（不去，替代=傳一句話）；其餘 do。steps 必含到達時間、dress code 等級、可離場時間 | null | ✅ |
-| rest | 無 | ✅ `cafe`，半徑 500m | big=店名，steps：點什麼、坐幾分、手機面朝下 | 店關了 | ✗ |
+| rest | 喝什麼 chips：咖啡／酒吧／居酒屋／熱炒燒烤 | ✅ Text Search 關鍵字 `咖啡廳`／`酒吧`／`居酒屋`／`熱炒 燒烤`，半徑 800m（居酒屋、熱炒沒有 Places type） | big=店名；咖啡：點什麼、坐幾分、手機面朝下；喝酒：點什麼（≤2 杯）、幾點前離開、怎麼回家（不得開車騎車） | 店關了 | ✗ |
 | sleep | 起床 chips：06:30／07:30／08:30 | ✗ | big=「HH:MM 熄燈」= 起床−8h；steps 含充電器位置 | null | ✗ |
 | reply | 對象 chips：老闆／同事／朋友／陌生人 | ✗ | 永遠 do；big=「現在回。N 句。」；steps 第一句答案、第二句時程 | null | ✗ |
 | buy | 金額 chips：500 以下／500–1,500／1,500–3,000 | ✗ | 預設 stop（不買）+ 72 小時規則；若 recentOrders 顯示 72 小時前已報告過同類 → do | null | ✅ |
@@ -260,7 +260,8 @@ level 0 種子：報、報告什麼事／班長…我是說，你各位／有、
 - API：Places API (New) `places:searchNearby`，`fieldMask` 固定：
   `places.id,places.displayName,places.location,places.currentOpeningHours.openNow,places.regularOpeningHours.weekdayDescriptions,places.primaryType`
   → 這組 mask 落在 **Enterprise** SKU（因為含營業時間）。**免費額度 1,000 次/月**（2026-07 價表）。單人每日 ≤ 5 次 = 150 次/月，安全。
-- 半徑：eat 800m、rest 500m；`maxResultCount: 8`；只保留 `openNow === true`。
+- 半徑：eat 800m、rest 800m；`maxResultCount: 8`；只保留 `openNow === true`。`languageCode: zh-TW`。
+- rest 走 `places:searchText`（`textQuery` 依「喝什麼」對中文關鍵字，`locationBias` 圓、`rankPreference: DISTANCE`、`openNow: true`），同一組 fieldMask、同一 SKU。2026-09-18 起：之前 rest 只查 `cafe` type 半徑 500m，正式站常常 `raw=0`。
 - 換口令：帶 `exclude[]`，過濾後再送 Claude。
 - **硬上限**：`api/order.ts` 每日 Places 呼叫計數（記在 Vercel KV？→ 不，零維護：記在回應 header 給前端，前端存本機，超過 40 次/日 → 前端不帶定位打 API，Claude 依第 7 節規則 6 降級）。
 - 定位權限被拒／無定位：`loc` 不送，走降級。

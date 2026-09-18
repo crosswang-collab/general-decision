@@ -128,6 +128,23 @@ describe('Places 過濾（第 8 節）', () => {
   })
 })
 
+describe('placesSearchFor（rest 走 Text Search、eat 走 Nearby）', () => {
+  it('rest：四個選項各對到中文關鍵字；沒選就用 default 咖啡', async () => {
+    const { placesSearchFor } = await import('../../src/places.ts')
+    const { CARD_BY_ID } = await import('../../src/cards.ts')
+    expect(placesSearchFor(CARD_BY_ID.rest, { drink: '居酒屋' })).toEqual({ kind: 'text', textQuery: '居酒屋', radius: 800 })
+    expect(placesSearchFor(CARD_BY_ID.rest, { drink: '熱炒燒烤' })).toEqual({ kind: 'text', textQuery: '熱炒 燒烤', radius: 800 })
+    expect(placesSearchFor(CARD_BY_ID.rest, { drink: '酒吧' })).toEqual({ kind: 'text', textQuery: '酒吧', radius: 800 })
+    expect(placesSearchFor(CARD_BY_ID.rest, {})).toEqual({ kind: 'text', textQuery: '咖啡廳', radius: 800 })
+  })
+  it('eat：沒有 textQuery 就走 Nearby，甜食照舊改 type', async () => {
+    const { placesSearchFor } = await import('../../src/places.ts')
+    const { CARD_BY_ID } = await import('../../src/cards.ts')
+    expect(placesSearchFor(CARD_BY_ID.eat, { taste: '甜食' })).toEqual({ kind: 'nearby', includedTypes: ['bakery', 'cafe', 'ice_cream_shop'], radius: 800 })
+    expect(placesSearchFor(CARD_BY_ID.eat, {})).toEqual({ kind: 'nearby', includedTypes: ['restaurant'], radius: 800 })
+  })
+})
+
 describe('placesTypesFor（甜食改查甜點店）', () => {
   it('甜食 → bakery / cafe / ice_cream_shop；其餘照卡片預設', async () => {
     const { placesTypesFor } = await import('../../src/places.ts')

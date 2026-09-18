@@ -16,11 +16,19 @@ describe('cards（第 13.1 節）', () => {
     expect(withPlaces).toEqual(['eat', 'rest'])
   })
 
-  it('needsPlaces 的卡都有 placesQuery，且半徑符合第 8 節（eat 800 / rest 500）', () => {
+  // 2026-09-18 改：rest 原本只查 cafe type、半徑 500m，正式站 [places] 常常 raw=0；
+  // 現在 rest 帶 intake「喝什麼」，走 Text Search 中文關鍵字，半徑與 eat 同為 800m（步行 10 分）。
+  it('needsPlaces 的卡都有 placesQuery，且半徑符合第 8 節（eat 800 / rest 800）', () => {
     expect(CARD_BY_ID.eat.placesQuery?.includedTypes).toEqual(['restaurant'])
     expect(CARD_BY_ID.eat.placesQuery?.radiusByTransport?.default).toBe(800)
-    expect(CARD_BY_ID.rest.placesQuery?.includedTypes).toEqual(['cafe'])
-    expect(CARD_BY_ID.rest.placesQuery?.radiusByTransport?.default).toBe(500)
+    expect(CARD_BY_ID.rest.placesQuery?.radiusByTransport?.default).toBe(800)
+    expect(CARD_BY_ID.rest.placesQuery?.textQuery?.key).toBe('drink')
+  })
+
+  it('rest 的「喝什麼」分咖啡與三種喝酒，每個選項都有 Text Search 關鍵字', () => {
+    const drink = CARD_BY_ID.rest.intake.find((f) => f.key === 'drink')!
+    expect(drink.options).toEqual(['咖啡', '酒吧', '居酒屋', '熱炒燒烤'])
+    for (const o of drink.options!) expect(CARD_BY_ID.rest.placesQuery?.textQuery?.byOption[o], o).toBeTruthy()
   })
 
   it('不需要 Places 的卡不得帶 placesQuery', () => {

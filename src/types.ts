@@ -38,7 +38,8 @@ export interface Order {
   verdict: 'do' | 'stop' // stop = 不去／不買，用紅卡
   meme: { top: string; big: string; bot: string } // top ≤ 16 字, big ≤ 10 字, bot ≤ 24 字
   steps: string[] // 1–3 條，每條 ≤ 22 字，可執行、無梗
-  place?: { id: string; name: string; walkMin?: number; openUntil?: string }
+  // mapUrl 只由伺服器端用 Places 真實 id 組出來（api/order.ts withPlace），模型不准填（DEV-PLAN-2 規則 8）。
+  place?: { id: string; name: string; walkMin?: number; openUntil?: string; mapUrl?: string }
   log: string // 完成後登記文字，≤ 30 字，描述式，不誇
 }
 

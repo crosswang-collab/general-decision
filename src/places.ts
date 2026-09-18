@@ -24,6 +24,15 @@ export interface RawPlace {
   primaryType?: string
 }
 
+/**
+ * 店名 → Google Maps 連結（DEV-PLAN-2 階段 B）。
+ * 用 Google 官方 Maps URLs scheme：query 是 query_place_id 失效時的後備，兩個都帶。
+ * 只能拿 Places API 回來的真 id 來組；模型講的 id 不可信。
+ */
+export function placeMapUrl(id: string, name: string): string {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(name)}&query_place_id=${encodeURIComponent(id)}`
+}
+
 /** 公尺 → 步行分鐘（80 m/min，無條件進位，至少 1）。 */
 export function walkMinutes(meters: number): number {
   return Math.max(1, Math.ceil(meters / 80))

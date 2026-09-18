@@ -77,24 +77,62 @@ export interface AvatarProps {
   title?: string
 }
 
+const MOODS: Mood[] = ['idle', 'bark', 'praise', 'punish']
+
+/**
+ * 資產探測結果快取（模組層級，跨元件、跨 mood 共用）。
+ * 沒有它，每次 mood 變更 hasAsset 都會重設成 false，先閃一幀舊色稿的向量頭像
+ * 再換成 8-bit webp（DEV-PLAN-2 A-1 ④）。true = 載得到；false = 404 / 載入失敗。
+ */
+const assetKnown = new Map<string, boolean>()
+const assetProbes = new Map<string, Promise<boolean>>()
+
+/** 探測一張資產是否存在；同一個 url 只會真的發出一次請求。 */
+export function probeAsset(url: string): Promise<boolean> {
+  const known = assetKnown.get(url)
+  if (known !== undefined) return Promise.resolve(known)
+  const pending = assetProbes.get(url)
+  if (pending) return pending
+  if (typeof Image === 'undefined') return Promise.resolve(false)
+  const p = new Promise<boolean>((resolve) => {
+    const img = new Image()
+    img.onload = () => { assetKnown.set(url, true); assetProbes.delete(url); resolve(true) }
+    img.onerror = () => { assetKnown.set(url, false); assetProbes.delete(url); resolve(false) }
+    img.src = url
+  })
+  assetProbes.set(url, p)
+  return p
+}
+
+/** 一次把同一位班長的四種表情都探測（並讓瀏覽器快取），換表情時就不用等。 */
+export function preloadOfficer(lv: Level): void {
+  for (const mood of MOODS) void probeAsset(assetUrl(lv, mood))
+}
+
+/** 測試用：清空探測快取。 */
+export function resetAssetCache(): void {
+  assetKnown.clear()
+  assetProbes.clear()
+}
+
 /**
  * 第 14 節資產介面：public/officers/{lv}/{mood}.webp 存在就用圖，否則內建 SVG。
- * 先畫 SVG（不閃白），背景探測 .webp，載到了才換掉。
+ * 第一次：先畫 SVG（不閃白），背景探測 .webp，載到了才換掉，並順手預載同一位班長的其他表情。
+ * 之後換表情：探測結果已在快取裡，直接用 <img>，不再退回 SVG 閃一下。
  */
 export function Avatar({ level, mood = 'idle', onDark = false, className, onClick, title }: AvatarProps) {
   const url = assetUrl(level, mood)
-  const [hasAsset, setHasAsset] = useState(false)
+  const [hasAsset, setHasAsset] = useState(() => assetKnown.get(url) ?? false)
 
   useEffect(() => {
     let alive = true
-    setHasAsset(false)
-    if (typeof Image === 'undefined') return
-    const img = new Image()
-    img.onload = () => { if (alive) setHasAsset(true) }
-    img.onerror = () => { if (alive) setHasAsset(false) }
-    img.src = url
+    const known = assetKnown.get(url)
+    // 已知結果直接套用；未知才探測。未知時不把 hasAsset 打回 false，避免閃回 SVG。
+    if (known !== undefined) setHasAsset(known)
+    else void probeAsset(url).then((ok) => { if (alive) setHasAsset(ok) })
+    preloadOfficer(level)
     return () => { alive = false }
-  }, [url])
+  }, [url, level])
 
   const common = { className, onClick, title, 'data-avatar': `${level}-${mood}` }
   return hasAsset

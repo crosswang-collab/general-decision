@@ -4,7 +4,7 @@ import { CARD_BY_ID } from '../src/cards.ts'
 import { buildOrderPrompt, type PlaceCandidate } from '../src/prompt.ts'
 import { parseOrder, ParseError } from '../src/orderParse.ts'
 import { enforceRules } from '../src/rules.ts'
-import { FIELD_MASK, MAX_RESULTS, toCandidates, type RawPlace } from '../src/places.ts'
+import { FIELD_MASK, MAX_RESULTS, placeMapUrl, toCandidates, type RawPlace } from '../src/places.ts'
 import type { Order, OrderRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
@@ -78,12 +78,19 @@ export function GET(request: Request): Promise<Response> { return handler(reques
 export function POST(request: Request): Promise<Response> { return handler(request) }
 export default { fetch: handler }
 
-/** Claude 若挑了店，補上我們算好的步行時間與營業時間（模型不擅長算這個）。 */
-function withPlace(order: Order, places: PlaceCandidate[]): Order {
+/**
+ * Claude 若挑了店，拿它去比對伺服器端的真實候選清單；比中了就用真實資料覆寫，
+ * 並在這裡（也只在這裡）用真 place id 組 Google Maps 連結（階段 B）。
+ * 比不中 → 原樣回傳、不得產生 mapUrl。模型自己寫的 mapUrl 已在 enforceRules() 被丟掉。
+ */
+export function withPlace(order: Order, places: PlaceCandidate[]): Order {
   if (!order.place) return order
   const match = places.find((p) => p.id === order.place!.id || p.name === order.place!.name)
   if (!match) return order
-  return { ...order, place: { id: match.id, name: match.name, walkMin: match.walkMin, openUntil: match.openUntil } }
+  return {
+    ...order,
+    place: { id: match.id, name: match.name, walkMin: match.walkMin, openUntil: match.openUntil, mapUrl: placeMapUrl(match.id, match.name) },
+  }
 }
 
 interface UpstreamError extends Error { status?: number }

@@ -14,8 +14,8 @@
 | `/api/order` | ✅ 正常 | `05:16:06 POST /api/order 200`，24h 內零 runtime error |
 | `/api/weekly` | ✅ 載得起來 | GET → `405 {"error":"method_not_allowed"}` |
 | `ANTHROPIC_API_KEY` | ✅ 已驗證有效 | 真實 POST 回 200，班長正常回話 |
-| `GOOGLE_PLACES_KEY` | ❌ **未驗證** | 測試時沒給定位 → `api/order.ts:44` 的 `card.needsPlaces && req.loc` 為 false → Places 整段跳過 |
-| Places API (New) | ❌ **未啟用** | GCP 專案 `919994638922` |
+| `GOOGLE_PLACES_KEY` | ⚠️ **未驗證** | 測試時沒給定位 → Places 整段跳過；且 2026-09-18 前 `api/order.ts` 把 Places 失敗靜靜吞掉不寫 log，從外面無法判斷。現已補 `[places] ok/fail` log |
+| Places API (New) | ✅ Cross 2026-09-18 確認已啟用 | 之前文件寫「未啟用」是舊資訊，未經查證就一路沿用，錯 |
 | 階段 2 / 3a / 3b | ✅ 已上線 | 正式站 CSS 資產量到完整 NES 色盤 |
 
 **開工前的唯一外部相依**：階段 B 需要先啟用 Places API (New)

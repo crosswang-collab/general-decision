@@ -49,6 +49,8 @@ export interface PlaceMemSummary {
   fav?: boolean
   /** 我方連鎖字典的品牌鍵（src/chains.ts）。同品牌曝光合併計算。 */
   b?: string
+  /** 累計完成次數（不受 dn 只帶 ≤5 筆的限制）。缺省 = dn.length（舊前端）。「第 N 次」= dc + 1（Team Lead 授權 R3 修正 S-5）。 */
+  dc?: number
 }
 
 /** 本機 IndexedDB 的完整記憶（src/placeMem.ts）。 */

@@ -37,6 +37,9 @@ describe('S6 離線重播（DEV-PLAN-3 A.3）', () => {
         dislikedHit: gate(m.recon.dislikedHit, m.recon.dislikedHit === 0, '= 0'),
       },
       familiar: {
+        // Team Lead 裁定（R3 修正 S-11／R2-08，2026-10-22）：familiar λ=0.05 接受，低於 R3§2.4 的 λ 0.8–2.0。
+        // 計劃起始 λ=0.6 時回訪率只有 0.12，過不了 0.35–0.65；「熟門熟路」的語意就是不怕回訪，
+        // 曝光懲罰本來就該接近 0，連續派同一家仍由冷卻（最近 3 次出過的店不再出）擋住。門檻本身不改。
         familiarRevisit: gate(m.familiar.familiarRevisit, m.familiar.familiarRevisit >= 0.35 && m.familiar.familiarRevisit <= 0.65, '0.35–0.65'),
         top3Share: gate(m.familiar.top3Share, m.familiar.top3Share < 0.5, '< 0.50'),
         belowFloor: gate(m.familiar.belowFloor, m.familiar.belowFloor === 0, '= 0'),

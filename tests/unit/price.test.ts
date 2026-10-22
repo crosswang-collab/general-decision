@@ -262,13 +262,14 @@ describe('priceText（T6：只用 Google 當次回傳值，不發明數字）', 
 })
 
 describe('amountsIn', () => {
-  it('NT$、¥、元、円、塊', () => {
+  it('NT$、¥、元、円（「塊」是量詞，不算金額：R3 修正 S-2）', () => {
     expect(amountsIn('這家人均 NT$120')).toEqual(['NT$120'])
     expect(amountsIn('一碗 ¥1,000 就飽')).toEqual(['¥1,000'])
     expect(amountsIn('便當 120元')).toEqual(['120元'])
     expect(amountsIn('定食 1000円')).toEqual(['1000円'])
     expect(amountsIn('1,200 円 起')).toEqual(['1,200 円'])
-    expect(amountsIn('三十塊 / 50塊')).toEqual(['50塊'])
+    expect(amountsIn('三十塊 / 50塊')).toEqual([]) // S-2：原本抓 ['50塊']，Team Lead 裁定「塊」不再當幣別
+    expect(amountsIn('點 3 塊雞排')).toEqual([])
     expect(amountsIn('一碗 ￥800')).toEqual(['￥800'])
   })
   it('金額區間算一個片段：NT$150–400、¥1,000〜2,500、150-400元', () => {

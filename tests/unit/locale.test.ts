@@ -170,3 +170,28 @@ describe('B12：日本座標不產生「捷運」', () => {
     expect(localizeFields(clean2, ['top', 'steps'], 'JP').hits).toEqual([])
   })
 })
+
+// R3 修正 S-8（checker B12）：台灣也要擋日本說法與日圓符號
+describe('B12：台灣座標不出現「地下鐵」與「¥」', () => {
+  it('TW：輸入含「地下鐵」與「¥／￥」→ 輸出都不含；JP 不變', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(localizeText('搭地下鐵去', 'TW').text).toBe('搭捷運去')
+    expect(localizeText('地下鐵站出口', 'TW').text).toBe('捷運站出口')
+    const dirty: Order = { ...clean, meme: { ...clean.meme, bot: '口袋的 ¥ 收好' }, steps: ['搭地下鐵兩站。', '￥ 不用換。'], log: '搭地下鐵完成。' }
+    const tw = localizeOrder(dirty, 'TW')
+    const text = JSON.stringify([tw.meme, tw.steps, tw.log])
+    expect(text).not.toMatch(/地下鐵|¥|￥/)
+    expect(tw.steps[0]).toBe('搭捷運兩站。')
+    const jp = localizeOrder(dirty, 'JP')
+    expect(jp.steps[0]).toBe('搭地下鐵兩站。')
+    expect(jp.meme.bot).toContain('¥')
+    expect(localizeText('搭地下鐵去', 'JP').text).toBe('搭地下鐵去')
+  })
+  it('enforceRules（有 pick、台灣）整條路徑也不留「地下鐵」與「¥」', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const pick = { place: { id: 'p1', name: '阿財魯肉飯', priceRange: { start: 80, end: 150, currency: 'TWD' } }, mode: 'new' as const, visits: 1, relaxed: [], exhausted: false }
+    const dirty: Order = { ...clean, meme: { top: '這家你沒去過', big: '阿財魯肉飯', bot: '¥ 別帶' }, steps: ['搭地下鐵過去。', '大概 ¥80。'] }
+    const out = enforceRules(dirty, 'eat', {}, NOW, [], { level: 1, country: 'TW', pick })
+    expect(JSON.stringify([out.meme, out.steps, out.log])).not.toMatch(/地下鐵|¥|￥/)
+  })
+})

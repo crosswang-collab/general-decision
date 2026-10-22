@@ -109,7 +109,11 @@ export const PARAMS = {
   fav: 2,
   cooldown: 3, // 最近幾次出過的店不再出
   reconMin: 3, // 全面偵察：沒見過的非連鎖店少於這個數 → exhausted
-  // familiar 計劃起始 0.6，重播回訪率只有 0.12（門檻 0.35–0.65）；0.05 → 0.40。熟門熟路本來就該幾乎不怕回訪，冷卻 3 次照樣擋連續同一家。
+  // familiar λ=0.05：Team Lead 裁定接受（R3 修正 S-11／R2-08，2026-10-22）。
+  //   計劃起始 0.6 時重播回訪率只有 0.12（門檻 0.35–0.65）；0.05 → 約 0.40。
+  //   理由：「熟門熟路」的語意就是不怕回訪，曝光懲罰本來就該接近 0；
+  //   連續派同一家仍由 cooldown（最近 3 次出過的店不再出）擋住，不靠 λ。
+  //   0.05 低於 R3§2.4 建議範圍下緣，是裁定後的例外，不是調參漂移；balanced／recon 仍在範圍內。
   lambda: { familiar: 0.05, balanced: 0.8, recon: 1.2 } as Record<Novelty, number>,
   wildcard: { familiar: 0, balanced: 0.2, recon: 1 } as Record<Novelty, number>,
 }
@@ -119,7 +123,11 @@ export const PARAMS = {
 const DAY = 86_400_000
 const LN2 = Math.LN2
 
-/** Σ exp(−ln2·Δt/半衰期)：被出成口令（shown）半衰期 10 天、去過（done）21 天。未來的時間戳當作現在。 */
+/**
+ * Σ exp(−ln2·Δt/半衰期)：被出成口令（shown）半衰期 PARAMS.halfShownDays（目前 3 天）、
+ * 去過（done）半衰期 PARAMS.halfDoneDays（目前 7 天）。未來的時間戳當作現在。
+ * 打分時乘上 PARAMS.lambda[方針]（familiar 0.05／balanced 0.8／recon 1.2）。
+ */
 export function exposure(entry: Pick<PlaceMemSummary, 'sh' | 'dn'> | undefined, now: number): number {
   if (!entry) return 0
   let e = 0
@@ -305,7 +313,9 @@ export function pickPlace(
   }
 
   const own = memById.get(pick.c.id)
-  const done = own?.dn?.length ?? 0
+  // 「第 N 次」：dn 只帶最近 ≤5 筆，N 會卡在 6；前端帶 dc（累計完成次數）就用 dc（S-5）。
+  // 取 max：正常資料 dc ≥ dn.length，兩者一樣；萬一前端算錯 dc 偏小，也不會比看得到的完成紀錄還少。
+  const done = Math.max(own?.dc ?? 0, own?.dn?.length ?? 0)
   const mode: PickMode = done > 0 ? 'revisit' : wildApplied && !pick.seen ? 'wildcard' : 'new'
   const seen14d = merged(pick.c.id).some((m) => [...(m.sh ?? []), ...(m.dn ?? [])].some((t) => now - t <= 14 * DAY))
   const uniq = [...new Set(relaxed)]

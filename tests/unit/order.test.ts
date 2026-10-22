@@ -42,6 +42,22 @@ describe('order parser 四層（第 11 節 / 13.1）', () => {
     expect(parseOrder('前言 ' + JSON.stringify(tricky) + ' 後語').log).toContain('收工')
   })
 
+  // R3 修正 S-10：place 由伺服器決定，模型的 place 壞掉不該讓整份口令判非法
+  it('S-10：place:null 或形狀不對 → 刪掉 place，其餘欄位照驗', () => {
+    for (const place of [null, '阿財魯肉飯', 42, [], { id: 1 }, { id: 'p1' }]) {
+      const out = parseOrder(JSON.stringify({ ...ORDER, place }))
+      expect(out.meme.big).toBe('阿財魯肉飯')
+      expect('place' in out).toBe(false)
+    }
+    // 其餘欄位壞掉照樣非法
+    expect(() => parseOrder(JSON.stringify({ ...ORDER, place: null, steps: [] }))).toThrow(ParseError)
+  })
+
+  it('S-10：模型只寫 place.name（prompt 不再給 id）→ 留著，id 補空字串', () => {
+    expect(parseOrder(JSON.stringify({ ...ORDER, place: { name: '阿財魯肉飯' } })).place).toEqual({ id: '', name: '阿財魯肉飯' })
+    expect(parseOrder(JSON.stringify({ ...ORDER, place: { id: 'x', name: '阿財魯肉飯' } })).place).toEqual({ id: 'x', name: '阿財魯肉飯' })
+  })
+
   it('steps 超過 3 條會截到 3 條（第 5 節上限）', () => {
     const many = { ...ORDER, steps: ['a', 'b', 'c', 'd', 'e'] }
     expect(parseOrder(JSON.stringify(many)).steps).toHaveLength(3)

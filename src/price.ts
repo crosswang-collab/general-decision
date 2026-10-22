@@ -114,7 +114,7 @@ const AMOUNT_RES: RegExp[] = [
  * 刻意不抓沒有幣別記號的「150–400」：口令裡天天有「10–15 分鐘」「11:30–14:00」，誤刪的代價比漏抓大。
  */
 export function amountsIn(text: string): string[] {
-  const out: string[] = []
+  const found: { at: number; s: string }[] = []
   const taken: [number, number][] = []
   for (const re of AMOUNT_RES) {
     re.lastIndex = 0
@@ -123,8 +123,10 @@ export function amountsIn(text: string): string[] {
       const e = s + m[0].length
       if (taken.some(([a, b]) => s < b && e > a)) continue // 被更具體的規則抓過
       taken.push([s, e])
-      out.push(m[0].trim())
+      found.push({ at: s, s: m[0].trim() })
     }
   }
-  return [...new Set(out)]
+  // 多條 regex 各掃一遍，結果要依文字中的位置排回來，才是「出現順序」。
+  found.sort((a, b) => a.at - b.at)
+  return [...new Set(found.map((f) => f.s))]
 }

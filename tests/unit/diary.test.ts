@@ -103,3 +103,23 @@ describe('日記分組', () => {
     expect(timeLabel('2026-09-11T12:41:00+08:00')).toBe('12:41')
   })
 })
+
+describe('makeEntry（Round 3 B13）：不寫店名，只留 placeId', () => {
+  it('輸出沒有 placeName 鍵；沒給 meta 就沒有 placeId／reason／mode 鍵', () => {
+    const x = makeEntry('2026-10-21T12:00:00+08:00', 'eat', 1, '阿財魯肉飯', 'done')
+    expect('placeName' in x).toBe(false)
+    expect(Object.keys(x).sort()).toEqual(['big', 'id', 'level', 'module', 'outcome', 'ts'])
+  })
+
+  it('meta 的 placeId／reason／mode 寫進去，而且仍然沒有 placeName', () => {
+    const x = makeEntry('2026-10-21T12:00:00+08:00', 'eat', 1, '阿財魯肉飯', 'reissued', { placeId: 'p1', reason: 'never_again', mode: 'new' })
+    expect(x).toMatchObject({ placeId: 'p1', reason: 'never_again', mode: 'new', outcome: 'reissued' })
+    expect(JSON.stringify(x)).not.toContain('placeName')
+  })
+
+  it('undefined 的 meta 不會變成鍵（免得整筆覆寫時蓋掉東西）', () => {
+    const x = makeEntry('2026-10-21T12:00:00+08:00', 'eat', 1, 'b', 'done', { placeId: undefined, reason: undefined })
+    expect('placeId' in x).toBe(false)
+    expect('reason' in x).toBe(false)
+  })
+})

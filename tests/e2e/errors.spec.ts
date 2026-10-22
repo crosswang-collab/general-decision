@@ -1,6 +1,8 @@
 // 第 13.2 節 Error ×4：定位拒絕→要座標（2026-09-18 起不再降級）；API 500→重試訊息與重試鍵；非法 JSON→同 500 路徑；離線→離線訊息且日記可開。
 import { expect, test } from '@playwright/test'
-import { FIXED_ORDER, mockOrder, mockOrderFailure } from './fixtures.ts'
+import { FIXED_ORDER, mockOrder, mockOrderFailure, prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 // 2026-09-18 斷言改了：Cross 規定吃／歇只能點地圖上的真店，不准用類別糊過去。
 // 沒定位就點不了店，所以定位被拒 → 錯誤畫面要座標 + 重試鍵，而且不打 API（mock 沒被叫到）。

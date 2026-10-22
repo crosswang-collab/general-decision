@@ -12,6 +12,19 @@ S1–S10 完成。已部署到 Vercel，`/api/order`、`/api/weekly` 在正式�
 **剩最後兩件事需要你本人**：在 Vercel 填 `ANTHROPIC_API_KEY`（必要）、在 GCP 啟用 Places API (New)（可選）。
 見 [DEPLOY.md](DEPLOY.md)。進度在 [state/decide-mvp-build.md](state/decide-mvp-build.md)。
 
+## Round 3（2026-10-22）：不再重複推薦、加上價位
+
+- **店由程式決定，班長只負責講**：`src/discovery.ts` 加權抽樣（品質保底＋曝光衰減＋連鎖降權＋偵察），候選池由 `src/lanes.ts` 輪替料理細類擴大，模型再也看不到候選清單。
+- **班長記得你**：`src/placeMem.ts` 只在手機存 place_id 與時間戳；「換一家」要報原因（店關了／不想吃這類／不要再來），口令卡印「新據點／第 N 次／偵察任務」。
+- **價位**：「吃」多一列預算（每人），依座標自動切台幣／日圓（`src/price.ts`）。
+- **上架準備**：同意畫面、隱私頁、檢舉入口、`docs/round3/STORE-LISTING.md`、`CAPACITOR-READY.md`。
+- 文件：市場調查與策略 `docs/round3/`（R1–R3、STRATEGY、DEV-PLAN-3）。Jev（TypeSafe）選配層：`src/typesafe.ts`、`src/jevJudge.ts`、`scripts/taste-judge.mjs`、`scripts/effort-route.mjs`，設 `TYPESAFE_API_KEY` 才會啟用。
+
+```bash
+npm run replay       # 離線重播：三方針 × 200 種子 × 14 天，新鮮度／品質門檻
+npm run probe:lanes  # 需要 GOOGLE_PLACES_KEY：實測每條料理細類 lane 回 200
+```
+
 ## 指令
 
 ```bash

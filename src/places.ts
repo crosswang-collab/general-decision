@@ -1,8 +1,8 @@
 // Places 呼叫規則 — 第 8 節。純邏輯放這裡，實際 fetch 在 api/order.ts。
-import type { PlaceCandidate } from './prompt.ts'
-import type { ModuleCard } from './types.ts'
+import { hhmmIn, weekdayMondayIndex, type Tz } from './tz.ts'
+import type { ModuleCard, PlaceCandidate, PriceLevel } from './types.ts'
 
-/** 第 8 節：固定 fieldMask，這組落在 Enterprise SKU。 */
+/** 第 8 節：固定 fieldMask，這組落在 Enterprise SKU。Round 3 加 types／priceLevel／priceRange（同 SKU，R3§0-3）。 */
 export const FIELD_MASK = [
   'places.id',
   'places.displayName',
@@ -13,18 +13,22 @@ export const FIELD_MASK = [
   'places.primaryType',
   'places.rating',
   'places.userRatingCount',
+  'places.types',
+  'places.priceLevel',
+  'places.priceRange',
 ].join(',')
 
-/** 給 Claude 的候選上限。 */
-export const MAX_RESULTS = 8
-/** 向 Places 一次要幾筆：多要一點才有得依評價排序、篩掉差的（Text Search 上限 20）。 */
-export const FETCH_COUNT = 15
+/** 向 Places 一次要幾筆：Nearby 的 maxResultCount 與 Text Search 的 pageSize 上限都是 20（R3§1.3）。 */
+export const FETCH_COUNT = 20
 /** 「即將營業」的容忍：nextOpenTime 在這幾分鐘內就算。 */
 export const OPENING_SOON_MIN = 60
-/** 第一輪查不到營業中的店 → 半徑放大這個倍數再查一次（800 → 2000m）。 */
+/** 第一次有效候選不足 → 第二次半徑放大這個倍數（800 → 2000m）。 */
 export const WIDEN_FACTOR = 2.5
 /** 第 8 節硬上限：每日 40 次之後前端就不帶定位了。 */
 export const DAILY_PLACES_CAP = 40
+
+/** Google 的 Money：units 是字串形式的整數，nanos 是 10^-9。 */
+export interface RawMoney { currencyCode?: string; units?: string | number; nanos?: number }
 
 export interface RawPlace {
   id?: string
@@ -35,6 +39,25 @@ export interface RawPlace {
   primaryType?: string
   rating?: number
   userRatingCount?: number
+  types?: string[]
+  priceLevel?: PriceLevel
+  priceRange?: { startPrice?: RawMoney; endPrice?: RawMoney }
+}
+
+/** Money → 數字；沒有 units 也沒有 nanos → undefined。 */
+export function moneyToNumber(m: RawMoney | undefined): number | undefined {
+  if (!m || (m.units == null && m.nanos == null)) return undefined
+  const n = Number(m.units ?? 0) + (m.nanos ?? 0) / 1e9
+  return Number.isFinite(n) ? n : undefined
+}
+
+/** priceRange（Money）→ PlaceCandidate.priceRange；start 缺就當沒有（end 缺 = 無上限）。 */
+function toPriceRange(r: RawPlace['priceRange']): PlaceCandidate['priceRange'] {
+  const start = moneyToNumber(r?.startPrice)
+  if (start === undefined) return undefined
+  const end = moneyToNumber(r?.endPrice)
+  const currency = r?.startPrice?.currencyCode ?? r?.endPrice?.currencyCode
+  return { start, ...(end !== undefined ? { end } : {}), ...(currency ? { currency } : {}) }
 }
 
 /**
@@ -96,10 +119,10 @@ export function haversineMeters(
   return 2 * R * Math.asin(Math.sqrt(s))
 }
 
-/** 今天是星期幾的營業時間字串裡，抓最後一個 HH:MM 當關門時間。 */
-export function closingTime(descriptions: string[] | undefined, now: Date): string | undefined {
+/** 今天是星期幾的營業時間字串裡，抓最後一個 HH:MM 當關門時間。「今天」以店家所在時區算（伺服器在 UTC 也要對）。 */
+export function closingTime(descriptions: string[] | undefined, now: Date, tz: Tz = 'Asia/Taipei'): string | undefined {
   if (!descriptions?.length) return undefined
-  const idx = (now.getDay() + 6) % 7 // Google 的 weekdayDescriptions 從星期一開始
+  const idx = weekdayMondayIndex(now, tz) // Google 的 weekdayDescriptions 從星期一開始
   const line = descriptions[idx]
   if (!line) return undefined
   const times = [...line.matchAll(/(\d{1,2}):(\d{2})/g)]
@@ -116,9 +139,6 @@ function minutesUntilOpen(p: RawPlace, now: Date): number | undefined {
   return Number.isFinite(ms) ? Math.round(ms / 60000) : undefined
 }
 
-const hhmmTaipei = (iso: string) =>
-  new Intl.DateTimeFormat('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Taipei' }).format(new Date(iso))
-
 /**
  * 評價分數：貝氏平均，把「5 顆星但只有 3 則」壓下去、「4.4 顆星 800 則」抬上來。
  * 先驗 4.0 分、權重 20 則。沒有評分視為 0，排最後。
@@ -129,15 +149,16 @@ export function ratingScore(rating?: number, count?: number): number {
 }
 
 /**
- * 第 8 節（2026-09-18 改）：候選 = 營業中，或 60 分鐘內開門；濾掉 exclude。
- * 排序改成評價優先（貝氏平均高的在前），同分再看步行。評分 ≥4.0 且 ≥10 則的店若有兩家以上，就只留這些。
- * Cross：不能只講類別，必須從地圖挑出正在營業或即將營業、評價數多且正面的真店。
+ * 第 8 節（2026-09-18 改；Round 3 再改）：候選 = 營業中，或 60 分鐘內開門；濾掉 exclude。
+ * 照貝氏平均排序（除錯畫面好讀），**全部保留**：品質保底與挑店都移到 src/discovery.ts pickPlace（DEV-PLAN-3 W1.1）。
+ * tz 是店家所在地的時區（src/tz.ts tzOf），營業到幾點／幾點開都用當地時間。
  */
 export function toCandidates(
   raw: RawPlace[],
   origin: { lat: number; lng: number },
   now: Date,
   exclude: string[] = [],
+  tz: Tz = 'Asia/Taipei',
 ): PlaceCandidate[] {
   const all = raw
     .filter((p) => p.id && p.displayName?.text)
@@ -154,23 +175,33 @@ export function toCandidates(
           ? walkMinutes(haversineMeters(origin, { lat: loc.latitude, lng: loc.longitude }))
           : undefined
       const open = p.currentOpeningHours?.openNow === true
-      return {
+      const c: PlaceCandidate = {
         id: p.id!,
         name: p.displayName!.text!,
         walkMin,
-        openUntil: open ? closingTime(p.regularOpeningHours?.weekdayDescriptions, now) : undefined,
-        opensAt: open ? undefined : hhmmTaipei(p.currentOpeningHours!.nextOpenTime!),
+        openUntil: open ? closingTime(p.regularOpeningHours?.weekdayDescriptions, now, tz) : undefined,
+        opensAt: open ? undefined : hhmmIn(p.currentOpeningHours!.nextOpenTime!, tz),
         primaryType: p.primaryType,
         rating: p.rating,
         ratingCount: p.userRatingCount,
       }
+      if (p.types?.length) c.types = p.types
+      if (p.priceLevel) c.priceLevel = p.priceLevel
+      const range = toPriceRange(p.priceRange)
+      if (range) c.priceRange = range
+      return c
     })
-    .sort((a, b) => ratingScore(b.rating, b.ratingCount) - ratingScore(a.rating, a.ratingCount) || (a.walkMin ?? 99) - (b.walkMin ?? 99))
-  const good = all.filter((c) => (c.rating ?? 0) >= 4.0 && (c.ratingCount ?? 0) >= 10)
-  return (good.length >= 2 ? good : all).slice(0, MAX_RESULTS)
+  return all.sort((a, b) => ratingScore(b.rating, b.ratingCount) - ratingScore(a.rating, a.ratingCount) || (a.walkMin ?? 99) - (b.walkMin ?? 99))
 }
 
-/** 模型挑的店對回真實候選（id 或店名相同）。對不到 → undefined，呼叫端要重打或強制指定。 */
+/** 兩次 Places 的結果合併：同 id 只留第一次出現的那筆，再照貝氏排序。 */
+export function mergeCandidates(a: PlaceCandidate[], b: PlaceCandidate[]): PlaceCandidate[] {
+  const seen = new Set(a.map((c) => c.id))
+  return [...a, ...b.filter((c) => !seen.has(c.id))]
+    .sort((x, y) => ratingScore(y.rating, y.ratingCount) - ratingScore(x.rating, x.ratingCount) || (x.walkMin ?? 99) - (y.walkMin ?? 99))
+}
+
+/** 模型寫的店對回真實候選（id 或店名相同）。Round 3 起只用來判斷模型有沒有寫錯店（dbg.forced），店一律由 pickPlace 決定。 */
 export function matchPlace(place: { id?: string; name?: string } | undefined, places: PlaceCandidate[]): PlaceCandidate | undefined {
   if (!place) return undefined
   return places.find((p) => p.id === place.id || p.name === place.name)

@@ -109,6 +109,9 @@ export async function markShown(
 export async function markDone(id: string, cuisine: string | undefined, now: number, module: MemModule = 'eat'): Promise<void> {
   await mutate(now, (store) => {
     const e = entryOf(store, id, module)
+    // 累計次數：done 只留 10 筆，數「第 N 次」不能靠它。舊資料沒有 doneCount 就從 done.length 接著數。
+    // 同一毫秒重複呼叫（pushEvent 會去重）不重複計。
+    if (!e.done.includes(now)) e.doneCount = (e.doneCount ?? e.done.length) + 1
     e.done = pushEvent(e.done, now)
     if (cuisine) e.cuisine = cuisine
   })
@@ -165,15 +168,23 @@ export async function cuisineStats(): Promise<CuisineStats> {
  * 送給伺服器的記憶摘要：只有 place_id、事件時間戳、品牌鍵、封鎖與愛店旗標。
  * 沒有店名、評分、座標（R3§3.3）。依最近事件時間排序，最多 limit 筆。
  * 只回該 module 的店；已過期的封鎖不送。
+ *
+ * R2-02：仍在封鎖中（含永久）與愛店**無條件先收**，不受 limit 擠掉——否則看過 200 家以上之後，
+ * 使用者按過「不要再來」的店會從摘要消失、伺服器又派回去。剩餘額度才依最近事件補滿到 limit。
+ * 每筆帶 dc＝累計完成次數（R2-03），伺服器的「第 N 次」靠它，不是靠只剩 5 筆的 dn。
  */
 export async function memSummary(module: MemModule, now: number, limit = 200): Promise<PlaceMemSummary[]> {
   const list = (await allMem()).filter((e) => e.module === module)
-  const rows = list
-    .filter((e) => e.shown.length > 0 || e.done.length > 0 || isBlocked(e, now) || e.fav)
-    .sort((a, b) => lastEventAt(b) - lastEventAt(a))
-    .slice(0, limit)
+  const byRecent = (a: PlaceMemEntry, b: PlaceMemEntry) => lastEventAt(b) - lastEventAt(a)
+  const kept = (e: PlaceMemEntry) => isBlocked(e, now) || !!e.fav
+  const must = list.filter(kept)
+  const room = Math.max(0, limit - must.length)
+  const rest = list.filter((e) => !kept(e) && (e.shown.length > 0 || e.done.length > 0)).sort(byRecent).slice(0, room)
+  const rows = [...must, ...rest].sort(byRecent)
   return rows.map((e) => {
-    const s: PlaceMemSummary = { id: e.id, sh: e.shown.slice(0, SUMMARY_EVENTS), dn: e.done.slice(0, SUMMARY_EVENTS) }
+    const s: PlaceMemSummary = {
+      id: e.id, sh: e.shown.slice(0, SUMMARY_EVENTS), dn: e.done.slice(0, SUMMARY_EVENTS), dc: e.doneCount ?? e.done.length,
+    }
     if (isBlocked(e, now)) s.x = e.dislikeUntil as number | 'forever'
     if (e.fav) s.fav = true
     if (e.brand) s.b = e.brand

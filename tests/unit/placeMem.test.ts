@@ -131,7 +131,7 @@ describe('memSummary：送給伺服器的摘要', () => {
     await markNeverAgain('p1', T0 + 2)
     await setFav('p1', true)
     const s = await memSummary('eat', T0 + 3)
-    expect(s).toEqual([{ id: 'p1', sh: [T0], dn: [T0 + 1], x: T0 + 2 + NEVER_AGAIN_MS, fav: true, b: 'mos' }])
+    expect(s).toEqual([{ id: 'p1', sh: [T0], dn: [T0 + 1], dc: 1, x: T0 + 2 + NEVER_AGAIN_MS, fav: true, b: 'mos' }])
     const json = JSON.stringify(s)
     expect(json).not.toMatch(/"(name|rating|lat|lng|priceLevel|priceRange)"/)
     expect(json).not.toMatch(/cuisine/) // 細類另外走 request.cuisine，不混在店的摘要裡
@@ -156,6 +156,57 @@ describe('memSummary：送給伺服器的摘要', () => {
     await markClosed('old', T0)
     expect((await memSummary('eat', T0 + 1000)).find((r) => r.id === 'old')!.x).toBe(T0 + CLOSED_MS)
     expect((await memSummary('eat', T0 + 2 * DAY)).find((r) => r.id === 'old')!.x).toBeUndefined()
+  })
+})
+
+describe('R2-02：封鎖中與愛店不被 limit 擠掉', () => {
+  it('再看過 201 家後，先前封鎖（含永久）與愛店的店仍在摘要；其餘依最近事件補滿到 limit', async () => {
+    await markShown('blocked90', meta, T0)
+    await markNeverAgain('blocked90', T0)
+    await markShown('forever', meta, T0)
+    await markNeverAgain('forever', T0)
+    await markNeverAgain('forever', T0 + 1)
+    await markShown('closed', meta, T0)
+    await markClosed('closed', T0)
+    await markShown('lover', meta, T0)
+    await setFav('lover', true)
+    for (let i = 0; i < 201; i++) await markShown(`n${i}`, meta, T0 + 10 + i)
+    const s = await memSummary('eat', T0 + 1000)
+    const ids = s.map((r) => r.id)
+    expect(s).toHaveLength(200)
+    for (const id of ['blocked90', 'forever', 'closed', 'lover']) expect(ids).toContain(id)
+    expect(ids).toContain('n200') // 最近的一般店照樣在
+    expect(ids).not.toContain('n0') // 最舊的一般店被擠掉
+    expect(s.find((r) => r.id === 'forever')!.x).toBe('forever')
+  })
+
+  it('封鎖／愛店本身超過 limit 也全部收進去', async () => {
+    for (let i = 0; i < 5; i++) { await markShown(`b${i}`, meta, T0 + i); await markNeverAgain(`b${i}`, T0 + i) }
+    await markShown('plain', meta, T0 + 99)
+    const s = await memSummary('eat', T0 + 1000, 3)
+    expect(s.map((r) => r.id).sort()).toEqual(['b0', 'b1', 'b2', 'b3', 'b4'])
+  })
+})
+
+describe('R2-03：dc＝累計完成次數', () => {
+  it('完成 12 次：done 只留 10 筆，dc 仍是 12；同一毫秒重複不重複計', async () => {
+    for (let i = 0; i < 12; i++) await markDone('p1', undefined, T0 + i)
+    await markDone('p1', undefined, T0 + 11)
+    expect((await getMem('p1'))!.done).toHaveLength(KEEP_EVENTS)
+    const [row] = await memSummary('eat', T0 + 100)
+    expect(row!.dc).toBe(12)
+    expect(row!.dn).toHaveLength(5)
+  })
+})
+
+describe('R2-03：舊資料相容', () => {
+  it('舊資料沒有累計欄位：dc 用 done.length，之後 markDone 從那裡接著數；只 shown 的 dc 是 0', async () => {
+    store.set('decide.placeMem', { old: { id: 'old', module: 'eat', shown: [T0], done: [T0, T0 - 1, T0 - 2], dislikes: 0 } })
+    expect((await memSummary('eat', T0 + 1))[0]!.dc).toBe(3)
+    await markDone('old', undefined, T0 + 5)
+    expect((await memSummary('eat', T0 + 6))[0]!.dc).toBe(4)
+    await markShown('fresh', meta, T0 + 7)
+    expect((await memSummary('eat', T0 + 8)).find((r) => r.id === 'fresh')!.dc).toBe(0)
   })
 })
 

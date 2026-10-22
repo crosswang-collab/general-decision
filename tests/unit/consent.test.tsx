@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { CONSENT_CLOSING, CONSENT_DECLINE, CONSENT_ITEMS, CONSENT_KEY, CONSENT_LEAD, CONSENT_VERSION, Consent } from '../../src/consent.tsx'
 import { PRIVACY_LINKS, PRIVACY_SECTIONS, Privacy } from '../../src/privacy.tsx'
-import { CONTACT_EMAIL } from '../../src/report.ts'
+import { CONTACT_EMAIL, ISSUES_URL } from '../../src/report.ts'
 import { findBanned } from '../../src/banned.ts'
 import { localizeText } from '../../src/locale.ts'
 import type { Level } from '../../src/types.ts'
@@ -91,12 +91,23 @@ describe('<Privacy>（5.1.1）', () => {
     for (const k of ['拿了什麼', '送給誰', '存在哪裡', '怎麼刪', '聯絡']) expect(titles).toContain(k)
   })
 
-  it('怎麼刪寫了清除網站資料；聯絡用 [CONTACT_EMAIL] 佔位', () => {
+  it('怎麼刪寫了清除網站資料；信箱仍是佔位時，聯絡方式顯示 GitHub issues 連結（R2-07）', () => {
     const { container } = render(<Privacy onBack={() => {}} />)
     const text = container.textContent ?? ''
     expect(text).toContain('清除瀏覽記錄與網站資料')
-    expect(text).toContain(CONTACT_EMAIL)
     expect(CONTACT_EMAIL).toBe('[CONTACT_EMAIL]')
+    expect(text).toContain(ISSUES_URL)
+    expect(ISSUES_URL).toBe('https://github.com/crosswang-collab/general-decision/issues')
+    expect(text).not.toContain('請寫信到 [CONTACT_EMAIL]')
+  })
+
+  it('R2-04 伺服器 log 照實寫：有技術紀錄（模組、查詢類別或關鍵字、國家、火力、耗時），不含座標／店家代碼／店名／記憶', () => {
+    const text = PRIVACY_SECTIONS.flatMap((s) => s.paras).join('\n')
+    const para = PRIVACY_SECTIONS.flatMap((s) => s.paras).find((p) => p.includes('技術紀錄'))
+    expect(para).toBeDefined()
+    for (const k of ['模組', '查詢類別或關鍵字', '素食', '居酒屋', '國家', '火力', '耗時']) expect(para).toContain(k)
+    for (const k of ['不含座標', '不含店家代碼', '不含店名', '不含記憶']) expect(para).toContain(k)
+    expect(text).not.toContain('一行匿名統計')
   })
 
   it('Google Maps 歸屬（translate=no）與條款連結都在，連結 https 且 noopener', () => {

@@ -25,7 +25,7 @@ import {
 import { bandLabels, countryOf } from './price.ts'
 import { Consent, CONSENT_KEY, CONSENT_VERSION } from './consent.tsx'
 import { Privacy } from './privacy.tsx'
-import { reportMailto } from './report.ts'
+import { reportHref } from './report.ts'
 import type {
   Band, Country, DiaryEntry, Level, ModuleCard, ModuleId, Novelty, Order, ReissueReason, WeeklyReport,
 } from './types.ts'
@@ -51,9 +51,19 @@ function hasConsent(): boolean {
   try { return localStorage.getItem(CONSENT_KEY) === CONSENT_VERSION } catch { return false }
 }
 
-/** PlaceMem／IndexedDB 出錯（無痕模式、空間滿了）不能擋住口令——記憶是加分，不是主線。 */
-async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-  try { return await fn() } catch { return fallback }
+/** safe() 的逾時：IndexedDB 卡住時最多等這麼久就用 fallback，口令照出。 */
+export const SAFE_TIMEOUT_MS = 800
+
+/**
+ * PlaceMem／IndexedDB 出錯（無痕模式、空間滿了）或卡住不回，都不能擋住口令——記憶是加分，不是主線。
+ * 逾時用 fallback；逾時後才完成或才失敗的原 promise 一律吞掉。
+ */
+export function safe<T>(fn: () => Promise<T>, fallback: T, ms: number = SAFE_TIMEOUT_MS): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms)
+    const settle = (v: T) => { clearTimeout(t); resolve(v) }
+    Promise.resolve().then(fn).then(settle, () => settle(fallback))
+  })
 }
 
 type Loc = { lat: number; lng: number }
@@ -131,8 +141,10 @@ export function App() {
   const record = useCallback(async (outcome: DiaryEntry['outcome'], o: Order | null, c: ModuleCard | null, reason?: ReissueReason) => {
     if (!o || !c || !issuedAt.current) return
     // Round 3：日記不再寫店名（Google 條款），只留 place_id 以便之後對回 PlaceMem。
+    // R2-01：只有吃／歇才寫 placeId 與 mode；其他卡就算模型帶了 place 也不記。
+    const p = isMemModule(c.id) ? o.place : undefined
     const list = await putEntry(
-      makeEntry(issuedAt.current, c.id, level, o.meme.big, outcome, { placeId: o.place?.id, reason, mode: o.place?.mode }),
+      makeEntry(issuedAt.current, c.id, level, o.meme.big, outcome, { placeId: p?.id, reason, mode: p?.mode }),
     )
     setEntries([...list].sort((a, b) => b.ts.localeCompare(a.ts)))
   }, [level])
@@ -182,6 +194,11 @@ export function App() {
 
     // 第 8 節：需要 Places 且今天還沒超過上限，才去要定位。
     // 手動報座標（C2）換來的位置優先，而且不再去問 GPS。
+    if (c.needsPlaces && !underPlacesCap()) {
+      setError(new ApiError('over_cap', ERROR_TEXT.over_cap.line))
+      setScreen('error')
+      return
+    }
     let loc: Loc | undefined = locOverride ?? manualLoc.current
     if (loc) {
       setGeoDenied(false)
@@ -228,10 +245,11 @@ export function App() {
         ...(rejectedCuisines.current.length ? { rejectedCuisines: [...rejectedCuisines.current] } : {}),
       })
       if (!issuedAt.current) issuedAt.current = new Date().toISOString()
-      // 修 STRATEGY §2⑦：拿到口令的當下就記 shown，不等使用者回報；記完才換畫面。
+      // 修 STRATEGY §2⑦：拿到口令的當下就記 shown，不等使用者回報。
+      // R2-05：不 await——IndexedDB 慢或卡住不能擋換畫面；失敗由 safe 吞掉。
       if (memModule && o.place?.id) {
         const p = o.place
-        await safe(() => markShown(p.id, { module: memModule, brand: p.brand, cuisine: p.cuisine }, Date.now()), undefined)
+        void safe(() => markShown(p.id, { module: memModule, brand: p.brand, cuisine: p.cuisine }, Date.now()), undefined)
       }
       setOrder(o)
       setScreen('cmd')
@@ -246,6 +264,7 @@ export function App() {
   /** C2：沒有定位時手動報地點。回傳錯誤文字（顯示在輸入列下面）；成功就直接重送，畫面會換掉。 */
   const reportLocation = useCallback(async (q: string): Promise<string | null> => {
     if (!card) return null
+    if (!underPlacesCap()) return ERROR_TEXT.over_cap.line
     try {
       const g = await requestGeocode(q)
       manualLoc.current = g.loc
@@ -312,11 +331,12 @@ export function App() {
   const hideTop = lunchHidesTop(geoLoc, new Date())
   const changeBudget = useCallback((n: Band | null) => {
     if (country !== 'TW' && country !== 'JP') return
-    const cur = effectiveBudget(budgets[country], hideTop)
-    const next = n === null ? [] : toggleBand(cur, n)
+    // R2-11：用存好的原始檔位算，不用午餐時段被濾掉最高檔的版本——午餐點一下不會刪掉存好的最高檔。
+    // effectiveBudget 只在「顯示」與「送出」時套。
+    const next = n === null ? [] : toggleBand(budgets[country], n)
     saveBudget(country, next)
     setBudgets((prev) => ({ ...prev, [country]: next }))
-  }, [budgets, country, hideTop])
+  }, [budgets, country])
 
   const [consentPrivacy, setConsentPrivacy] = useState(false)
   const accept = useCallback(() => {
@@ -390,9 +410,11 @@ export function App() {
             <button className="sheet-opt" data-testid="reason-closed" onClick={() => void reissueWith('closed')}>
               <b>店關了</b><span>24 小時內不再派這家</span>
             </button>
-            <button className="sheet-opt" data-testid="reason-kind" onClick={() => void reissueWith('not_this_kind')}>
-              <b>{card.id === 'rest' ? '今天不想喝這類' : '今天不想吃這類'}</b><span>今天少派這一類，班長記一筆</span>
-            </button>
+            {card.id !== 'rest' && (
+              <button className="sheet-opt" data-testid="reason-kind" onClick={() => void reissueWith('not_this_kind')}>
+                <b>今天不想吃這類</b><span>今天少派這一類，班長記一筆</span>
+              </button>
+            )}
             <button className="sheet-opt" data-testid="reason-never" onClick={() => void reissueWith('never_again')}>
               <b>這家不要再來</b><span>90 天不見；再按一次就永遠不見</span>
             </button>
@@ -595,7 +617,7 @@ function ManualLoc({ onGo }: { onGo: (q: string) => Promise<string | null> }) {
       <div className="manual-in">
         <input
           id="manual-loc" data-testid="manual-loc" type="text" inputMode="search" enterKeyHint="go"
-          autoComplete="off" placeholder="車站或地標，例如：台北車站" value={q} onChange={(e) => setQ(e.target.value)}
+          autoComplete="off" maxLength={60} placeholder="車站或地標，例如：台北車站" value={q} onChange={(e) => setQ(e.target.value)}
         />
         <button className="btn" type="submit" data-testid="manual-loc-go" disabled={busy || !q.trim()}>{busy ? '查詢中' : '報座標'}</button>
       </div>
@@ -641,7 +663,7 @@ function Cmd({ card, level, order, canReissue, geoDenied, onDone, onReissue, onS
       />
       <StepsCard steps={order.steps} place={order.place} />
       {/* C3（App Store 1.2）：檢舉不當口令。mailto 就夠，不需要後端；極小文字，不是第二個動作。 */}
-      <p className="report"><a href={reportMailto(order, level)} data-testid="report-link">回報這道口令</a></p>
+      <p className="report"><a href={reportHref(order, level)} target="_blank" rel="noopener noreferrer" data-testid="report-link">回報這道口令</a></p>
       <div className="row">
         <button className="btn" onClick={onDone}>報告班長，完成</button>
         {canReissue && <button className="btn line" data-testid="reissue" onClick={onReissue}>{card.reissueLabel}</button>}

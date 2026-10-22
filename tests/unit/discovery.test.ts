@@ -160,6 +160,15 @@ describe('pickPlace', () => {
     expect(pickPlace(c, shownOnly, undefined, ctx(c, { novelty: 'familiar' }))).toMatchObject({ mode: 'new', visits: 1 })
   })
 
+  it('S-5：「第 N 次」不再卡在 6——dc（累計完成次數）=7 → visits 8；沒帶 dc 退回 dn.length', () => {
+    const c = shops(1)
+    const dn = [1, 2, 3, 4, 5].map((d) => NOW - d * 3 * DAY)
+    const withDc: PlaceMemSummary[] = [{ id: 'c0', sh: [...dn], dn, dc: 7 }]
+    expect(pickPlace(c, withDc, undefined, ctx(c, { novelty: 'familiar' }))).toMatchObject({ mode: 'revisit', visits: 8 })
+    const legacy: PlaceMemSummary[] = [{ id: 'c0', sh: [...dn], dn }]
+    expect(pickPlace(c, legacy, undefined, ctx(c, { novelty: 'familiar' }))).toMatchObject({ mode: 'revisit', visits: 6 })
+  })
+
   it('三方針的 wildcard 機率：familiar 0、balanced ≈0.2、recon 1（有沒見過的店時）', () => {
     const c = shops(20)
     // 一半去過，一半沒見過

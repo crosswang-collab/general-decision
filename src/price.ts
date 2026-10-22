@@ -113,12 +113,13 @@ export function priceText(p: Pick<PlaceCandidate, 'priceLevel' | 'priceRange'>, 
 const AMOUNT_RES: RegExp[] = [
   /NT\$?\s?\d[\d,]*(?:\s?[–~〜-]\s?\d[\d,]*)?/g,
   /[¥￥]\s?\d[\d,]*(?:\s?[–~〜-]\s?\d[\d,]*)?/g,
-  /\d[\d,]*(?:\s?[–~〜-]\s?\d[\d,]*)?\s?(?:元|円|塊)/g,
+  /\d[\d,]*(?:\s?[–~〜-]\s?\d[\d,]*)?\s?(?:元|円)/g,
 ]
 
 /**
  * 抓文字裡的金額片段（NT$120、¥1,000、120元、1000円、NT$150–400），給 enforceRules 比對。去重、保留出現順序。
- * 刻意不抓沒有幣別記號的「150–400」：口令裡天天有「10–15 分鐘」「11:30–14:00」，誤刪的代價比漏抓大。
+ * 只認 NT$／¥／￥／元／円。刻意不抓沒有幣別記號的「150–400」：口令裡天天有「10–15 分鐘」「11:30–14:00」，誤刪的代價比漏抓大。
+ * 也不抓「塊」（R3 修正 S-2）：「點 3 塊雞排」「2 塊豆腐」的塊是量詞，抓了會把點餐內容整段拔掉。
  */
 export function amountsIn(text: string): string[] {
   const found: { at: number; s: string }[] = []

@@ -67,10 +67,18 @@ describe('B6：mode 語意（三 mode × 三火力 × 20 次 mock，100% 通過�
     expect(`${out.meme.top}${out.meme.bot}`).toMatch(/沒去過|新據點|第一次|沒來過/)
   })
 
-  it('steps／log 裡寫錯的「第 N 次」改成伺服器算的數字', () => {
-    const out = run(order({ top: '第 2 次了' }, { steps: ['這是你第 5 次來，照舊點。'], log: '第 5 次報到。' }), pick('revisit', 2))
-    expect(out.steps[0]).toBe('這是你第 2 次來，照舊點。')
-    expect(out.log).toBe('第 2 次報到。')
+  // R3 修正 S-3（Team Lead 裁定）：原本「steps／log 裡寫錯的第 N 次改成伺服器數字」會把「不要讓我說第二次」改壞；
+  // 次數檢查只作用在 meme.top／meme.bot，steps 與 log 不改數字。
+  it('S-3：次數檢查只管 meme.top／bot；steps／log 的「第 N 次」原樣保留（「不要讓我說第二次」）', () => {
+    const steps = ['不要讓我說第二次，點招牌。', '第一次點就點大碗。']
+    const log = '不要讓我說第二次。'
+    const rev = run(order({ top: '第 5 次了', bot: '動作快' }, { steps, log }), pick('revisit', 3))
+    expect(rev.steps).toEqual(steps)
+    expect(rev.log).toBe(log)
+    expect(nthCounts(`${rev.meme.top}\n${rev.meme.bot}`).every((n) => n === 3)).toBe(true) // meme 照樣修
+    const fresh = run(order({ top: '這家你沒去過' }, { steps, log }), pick('new'))
+    expect(fresh.steps).toEqual(steps)
+    expect(fresh.log).toBe(log)
   })
 })
 
@@ -135,6 +143,12 @@ describe('店家覆寫（T2）與伺服器欄位', () => {
     const noPick = enforceRules(forged, 'go', {}, NOW, [])
     expect(noPick.place).toEqual({ id: 'p1', name: '阿財魯肉飯' })
   })
+  it('S-1：handler 路徑（有 ctx）沒有 pick → place 整個刪掉，模型編的店名／id 不准流出', () => {
+    const forged = order({}, { place: { id: 'p1', name: '阿財魯肉飯', walkMin: 3, openUntil: '23:00' } })
+    const out = enforceRules(forged, 'go', {}, NOW, [], { level: 1, country: 'TW', pick: null })
+    expect(out.place).toBeUndefined()
+    expect('place' in out).toBe(false)
+  })
   it('bigName：慣稱 ≤10 字就留；太長去分店字尾；再太長截 10 字', () => {
     expect(bigName('阿財魯肉飯', '阿財')).toBe('阿財')
     expect(bigName('阿財魯肉飯', '附近的小吃店')).toBe('阿財魯肉飯')
@@ -151,5 +165,40 @@ describe('國家傳遞（T9、B12 伺服器側）', () => {
     expect(jp.steps.join('')).toContain('地下鐵')
     const tw = run(o, pick('new'), 1, 'TW')
     expect(tw.steps.join('')).not.toContain('地鐵')
+  })
+})
+
+// ── R3 修正（fix-brief SERVER 組）────────────────────────────────────
+describe('S-2：「塊」是量詞不是金額', () => {
+  it('「點 3 塊雞排」原樣保留；真的金額照拔', () => {
+    const out = run(order({ top: '這家你沒去過' }, { steps: ['點 3 塊雞排。', '炸豆腐 2 塊，30元。'] }), pick('new'))
+    expect(out.steps[0]).toBe('點 3 塊雞排。')
+    expect(out.steps[1]).toContain('炸豆腐 2 塊')
+    expect(out.steps[1]).not.toContain('30元')
+  })
+})
+
+describe('S-6：營業時間照實（T6）', () => {
+  const OPEN: PlaceCandidate = { ...PLACE, openUntil: '21:00' }
+  const LATER: PlaceCandidate = { id: 'p2', name: '晚開麵館', opensAt: '11:30' }
+
+  it('「營業到／關／打烊」的時間跟 openUntil 不同 → 換成伺服器值；其他時間不動', () => {
+    const o = order({ top: '這家你沒去過', bot: '22:00 就關門了，快' }, { steps: ['營業到 22:00，動作快。', '13:00 前吃完。', '9:00 打烊前別去。'] })
+    const out = run(o, pick('new', 1, {}, OPEN))
+    expect(out.meme.bot).toBe('21:00 就關門了，快')
+    expect(out.steps).toEqual(['營業到 21:00，動作快。', '13:00 前吃完。', '21:00 打烊前別去。'])
+  })
+
+  it('「開」的時間跟 opensAt 不同 → 換；伺服器沒有 openUntil → 收店時間片段整段刪', () => {
+    const o = order({ big: '晚開麵館', top: '這家你沒去過' }, { steps: ['11:00 開門，先去排。', '21:00 打烊。', '開門時間 10:45，別遲到。'] })
+    const out = run(o, pick('new', 1, {}, LATER))
+    expect(out.steps).toEqual(['11:30 開門，先去排。', '開門時間 11:30，別遲到。'])
+  })
+
+  it('營業區間「營業 10:00–23:00」→ 換成「營業到 HH:MM」；對的時間原樣保留', () => {
+    const out = run(order({ top: '這家你沒去過' }, { steps: ['營業 10:00–23:00，現在就去。', '營業到 21:00。'] }), pick('new', 1, {}, OPEN))
+    expect(out.steps).toEqual(['營業到 21:00，現在就去。', '營業到 21:00。'])
+    const same = order({ top: '這家你沒去過' }, { steps: ['營業到 21:00，走。', '12:50 出發。'] })
+    expect(run(same, pick('new', 1, {}, OPEN)).steps).toEqual(['營業到 21:00，走。', '12:50 出發。'])
   })
 })

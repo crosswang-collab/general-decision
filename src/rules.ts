@@ -67,8 +67,11 @@ export function enforceRules(
   }
   const level: Level = ctx?.level ?? 1
   const pick = ctx?.pick ?? null
-  order = pick ? overridePlace(order, pick) : dropServerFields(order)
+  // 有 ctx 但沒有 pick = 伺服器這道口令沒有查店（go／sleep… 不查 Places 的卡）：模型寫的 place 全是編的，整個刪掉（R3 修正 S-1／R2-01）。
+  // ctx 省略的舊呼叫端（設計稿、既有測試）維持只丟伺服器欄位。
+  order = pick ? overridePlace(order, pick) : ctx ? dropPlace(order) : dropServerFields(order)
   if (pick) order = scrubAmounts(order, priceText(pick.place, ctx?.country ?? 'TW') ?? '', ctx?.country ?? 'TW', pick.place.name)
+  if (pick) order = fixHours(order, pick, level, now)
   order = scrubBanned(order, level, pick, now)
   if (pick) order = enforceMode(order, level, pick, now)
   return localizeOrder(order, ctx?.country ?? 'TW')
@@ -89,7 +92,15 @@ function overridePlace(order: Order, pick: PickResult): Order {
   return { ...order, meme: { ...order.meme, big: bigName(p.name, order.meme.big) }, place: { id: p.id, name: p.name } }
 }
 
-/** 沒有 pick 時，模型寫的 place 只留 id／name／walkMin／openUntil；mode／band／priceText… 只准伺服器填。 */
+/** S-1：伺服器沒查店 → 模型寫的 place（店名、id、步行、營業）一個都不准流到前端。 */
+function dropPlace(order: Order): Order {
+  if (!('place' in order)) return order
+  const { place: dropped, ...rest } = order
+  if (dropped) console.warn('[rules] 這張卡沒有查店，模型寫的 place 已刪除')
+  return rest
+}
+
+/** 舊呼叫端（ctx 省略）沒有 pick 時，模型寫的 place 只留 id／name／walkMin／openUntil；mode／band／priceText… 只准伺服器填。 */
 function dropServerFields(order: Order): Order {
   if (!order.place) return order
   const { id, name, walkMin, openUntil, mapUrl } = order.place
@@ -109,7 +120,7 @@ const digits = (s: string) => (s.match(/\d[\d,]*/g) ?? []).map((d) => d.replace(
 export function scrubAmounts(order: Order, priceText: string, country: Country, placeName?: string): Order {
   const allowed = new Set(digits(priceText))
   const removed: string[] = []
-  const wrongCurrency = (a: string) => (country === 'TW' && /[¥￥円]/.test(a)) || (country === 'JP' && /NT|元|塊/.test(a))
+  const wrongCurrency = (a: string) => (country === 'TW' && /[¥￥円]/.test(a)) || (country === 'JP' && /NT|元/.test(a))
   const clean = (text: string): string => {
     let out = text
     // 店名本身的數字（「百元便當」「100元快炒」）不算金額
@@ -131,6 +142,64 @@ export function scrubAmounts(order: Order, priceText: string, country: Country, 
   if (!removed.length) return order
   console.warn(`[rules] 拔掉 ${removed.length} 個不在價位資料裡的金額`)
   return { ...order, meme, steps, log }
+}
+
+// ── T6：營業時間照實（R3 修正 S-6）─────────────────────────────────
+const HM = '(?<!\\d)(\\d{1,2})[:：](\\d{2})(?!\\d)'
+const normHM = (h: string, m: string) => `${h.padStart(2, '0')}:${m}`
+/** 「營業 11:00–21:00」「營業時間：11:00~21:00」：整段區間。 */
+const HOURS_RANGE_RE = new RegExp(`營業(?:時間)?\\s*[:：]?\\s*${HM}\\s*[–~〜-]\\s*${HM}`, 'g')
+/** 開門語境：「11:30 開」「11:30 才開門」「開門時間 11:30」。「11:00 開到 21:00」的 11:00 不判（下一段處理到 21:00）。 */
+const OPEN_RES = [
+  new RegExp(`((?:開門|開店|開始營業)(?:時間)?\\s*[是為:：]?\\s*)${HM}`, 'g'),
+  new RegExp(`${HM}(\\s*(?:就|才|準時)?\\s*(?:開門|開店|開始營業|開(?![車會到至])))`, 'g'),
+]
+/** 收店語境：「營業到 21:00」「開到 21:00」「打烊時間 21:00」「21:00 打烊」「21:00 關門」。 */
+const CLOSE_RES = [
+  new RegExp(`((?:營業|開)(?:到|至)\\s*|(?:關門|關店|打烊)(?:時間)?\\s*[是為:：]?\\s*)${HM}`, 'g'),
+  new RegExp(`${HM}(\\s*(?:就|會)?\\s*(?:關門|關店|打烊|關(?![於係心注掉燈手機上好])))`, 'g'),
+]
+
+/**
+ * 有 pick 時，meme.top／meme.bot／steps 裡「開／營業／關／打烊」語境的 HH:MM 必須等於伺服器的 opensAt／openUntil：
+ * 不一樣 → 換成伺服器值；伺服器沒有該值 → 連同語境詞整段刪掉。其他時間（「13:00 前吃完」）不動。
+ * meme.big 是店名、log 是登記，不在範圍內。
+ */
+export function fixHours(order: Order, pick: PickResult, level: Level, now: Date): Order {
+  const { opensAt, openUntil } = pick.place
+  const fix = (text: string): string => {
+    let out = text.replace(HOURS_RANGE_RE, (all, h1: string, m1: string, h2: string, m2: string) => {
+      if (normHM(h1, m1) === opensAt && normHM(h2, m2) === openUntil) return all
+      return openUntil ? `營業到 ${openUntil}` : opensAt ? `${opensAt} 開` : ''
+    })
+    const apply = (re: RegExp, want: string | undefined, timeFirst: boolean) => {
+      out = out.replace(re, (all: string, a: string, b: string, c: string) => {
+        const [h, m] = timeFirst ? [a, b] : [b, c]
+        const t = normHM(h, m)
+        if (t === want) return all
+        if (!want) return ''
+        const ctxWord = timeFirst ? c : a
+        return timeFirst ? `${want}${ctxWord}` : `${ctxWord}${want}`
+      })
+    }
+    apply(OPEN_RES[0]!, opensAt, false)
+    apply(OPEN_RES[1]!, opensAt, true)
+    apply(CLOSE_RES[0]!, openUntil, false)
+    apply(CLOSE_RES[1]!, openUntil, true)
+    return out === text ? text : tidy(out)
+  }
+  const top0 = fix(order.meme.top)
+  const bot0 = fix(order.meme.bot)
+  const salt = lineSalt(`${pick.place.id}|${now.getTime()}`)
+  // 拔完只剩標點：top 交給 enforceMode 補 mode 語料；bot 換中性句
+  const empty = (s: string) => !/[\p{L}\p{N}]/u.test(s)
+  const top = empty(top0) && !empty(order.meme.top) ? modeLine(pick.exhausted ? 'exhausted' : pick.mode, level, pick.visits, salt) : top0
+  const bot = empty(bot0) && !empty(order.meme.bot) ? neutralBot(level, salt + 1) : bot0
+  let steps = order.steps.map(fix).filter((s) => !empty(s))
+  if (steps.length === 0) steps = [NEUTRAL_STEP]
+  if (top === order.meme.top && bot === order.meme.bot && steps.length === order.steps.length && steps.every((s, i) => s === order.steps[i])) return order
+  console.warn('[rules] 營業時間跟伺服器資料對不上，已改成伺服器值')
+  return { ...order, meme: { ...order.meme, top, bot }, steps }
 }
 
 /** 拔字後收尾：重複空白、開頭結尾的標點、連續標點。 */
@@ -182,13 +251,11 @@ function enforceMode(order: Order, level: Level, pick: PickResult, now: Date): O
     if (pick.exhausted) bot = modeLine(mode, level, visits, salt + 2)
     else top = modeLine(mode, level, visits, salt)
   }
-  // steps／log 裡的「第 N 次」也不准錯（例：「這是你第 5 次來」但其實第 2 次）
-  const fixNth = (s: string) => (hasWrongCount(s, mode, visits) ? s.replace(/第\s*([0-9０-９]+|[一二兩三四五六七八九十]+)\s*次/g, mode === 'revisit' ? `第 ${visits} 次` : '第一次') : s)
-  const steps = order.steps.map(fixNth)
-  const log = fixNth(order.log)
-  if (`${top}|${bot}` === before && steps.every((s, i) => s === order.steps[i]) && log === order.log) return order
+  // 次數檢查只管 meme.top／meme.bot（R3 修正 S-3）：steps／log 裡的「第 N 次」多半不是到店次數
+  // （「不要讓我說第二次」「第一次點就點招牌」），改數字會把句子改壞，原樣保留。
+  if (`${top}|${bot}` === before) return order
   console.warn(`[rules] mode=${mode} 語意不符，已換語料`)
-  return { ...order, meme: { ...order.meme, top, bot }, steps, log }
+  return { ...order, meme: { ...order.meme, top, bot } }
 }
 
 /**
@@ -206,6 +273,16 @@ export function localizeOrder(order: Order, country: Country = 'TW'): Order {
 
   const rest = localizeFields(out, ['steps', 'log'], country)
   if (rest.hits.length) { hits.push(...rest.hits); out = rest.value }
+
+  // 人在台灣：金額已在 scrubAmounts 拔掉，殘留的單獨「¥／￥」字元也拿掉（R3 修正 S-8／checker B12、T9）。
+  if (country === 'TW') {
+    const has = (s: string) => /[¥￥]/.test(s)
+    if ([out.meme.top, out.meme.big, out.meme.bot, ...out.steps, out.log].some(has)) {
+      const strip = (s: string) => (has(s) ? tidy(s.replace(/[¥￥]/g, '')) : s)
+      out = { ...out, meme: { top: strip(out.meme.top), big: strip(out.meme.big), bot: strip(out.meme.bot) }, steps: out.steps.map(strip), log: strip(out.log) }
+      hits.push('¥')
+    }
+  }
 
   // URL：模型不准講連結。place.mapUrl 由 withPlace() 之後才補，這裡若已有就是模型編的，一併丟掉。
   let urlHits = 0

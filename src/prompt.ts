@@ -19,7 +19,7 @@ level 2「士官長 老郭」：毒舌、比喻狠、不留情。「我看過的
 3. log（登記）不罵、不誇：只描述時間、口令、使用者做了什麼。例：「你去了你不想去的地方，而且準時。」
 4. 不解釋、不道歉、不給第二選項。verdict=stop 時，steps 第一條就是替代行為（且只有一個）。
 5. 這八張卡全部是小事，一律要給可執行的口令。禁止回「大事不受理」、禁止叫使用者去找連長或任何人、禁止用「這不是班長管的」之類的話推掉。verdict:'stop' 只有在【已判定】明講時才出現（赴、買不買）。
-6. 有【店已決定】時，店已由班長決定：place.id、place.name 照填那一家，meme.big 就是那家店名。禁止只講類別（「甜點店」「小吃店」「附近的咖啡廳」一律不算回答）、禁止編造店名、禁止提到任何別家店。註明「HH:MM 開」的店要在 steps 寫清楚幾點開門。金額只准照抄【店已決定】給的價位，禁止自己生金額。
+6. 有【店已決定】時，店已由班長決定：place.name 照填那一家（place.id 由伺服器填，留空字串），meme.big 就是那家店名。禁止只講類別（「甜點店」「小吃店」「附近的咖啡廳」一律不算回答）、禁止編造店名、禁止提到任何別家店。註明「HH:MM 開」的店要在 steps 寫清楚幾點開門。金額只准照抄【店已決定】給的價位，禁止自己生金額。
 7. 輸出只有 Order JSON，不加任何前後文、不加 markdown fence。
 8. 一律用台灣的繁體中文與台灣生活用語。禁止中國用語（質量／視頻／信息／屏幕／默認／用戶／激活／軟件／網絡／出租車／自行車／盒飯／早點／地鐵）。軍事用語只用國軍的（連、排、班、值星、出操、寢室、輔導長），不得使用解放軍編制用語（指導員、政委）。
 
@@ -73,7 +73,8 @@ function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): st
   const band = bandOf(p, country)
   const over = req.budget?.length && band !== null && priceFit(band, req.budget) < 1
   return [
-    `【店已決定】place.id=${p.id}　place.name=${p.name}　${p.walkMin ? `步行 ${p.walkMin} 分　` : ''}${hours}　價位：${price}`,
+    // R3 修正 S-9：不送 place.id——模型用不到，id 由 withPlace 填（資料最小化，跟不送座標同一個理由）。
+    `【店已決定】place.name=${p.name}　${p.walkMin ? `步行 ${p.walkMin} 分　` : ''}${hours}　價位：${price}`,
     `mode=${pick.mode}　這是使用者第 ${pick.visits} 次被派到這家。`,
     '你只負責寫口令：meme.big 就是這家店名（≤10 字，太長用店家慣稱）。',
     modeRule,

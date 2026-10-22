@@ -46,7 +46,15 @@ export const PLA_TO_ROC: LocaleRule[] = [
   { from: '政委', to: '輔導長' },
 ]
 
-export const LOCALE_RULES: LocaleRule[] = [...CN_TO_TW, ...PLA_TO_ROC]
+/**
+ * ①′ 人在台灣：日本說法的「地下鐵」也換成「捷運」（R3 修正 S-8／checker B12）。
+ * 不放進 CN_TO_TW：人在日本時「地下鐵」是對的（JP_TRANSIT 甚至會把「地鐵」換成它），日本規則不能套到。
+ */
+export const TW_TRANSIT: LocaleRule[] = [
+  { from: '地下鐵', to: '捷運' },
+]
+
+export const LOCALE_RULES: LocaleRule[] = [...CN_TO_TW, ...TW_TRANSIT, ...PLA_TO_ROC]
 
 /** ③ 人在日本：台灣專有的交通詞換成當地說法（介面仍是台灣繁中，只是不講錯地方）。 */
 export const JP_TRANSIT: LocaleRule[] = [
@@ -55,7 +63,7 @@ export const JP_TRANSIT: LocaleRule[] = [
   { from: '捷運', to: '電車' },
 ]
 
-/** 依所在國家取規則：日本不套「地鐵→捷運」，改套 JP_TRANSIT；其餘國家照台灣規則。 */
+/** 依所在國家取規則：日本不套「地鐵→捷運」「地下鐵→捷運」，改套 JP_TRANSIT；其餘國家照台灣規則。 */
 export function rulesFor(country: Country = 'TW'): LocaleRule[] {
   if (country !== 'JP') return LOCALE_RULES
   return [...CN_TO_TW.filter((r) => r.from !== '地鐵'), ...PLA_TO_ROC, ...JP_TRANSIT]

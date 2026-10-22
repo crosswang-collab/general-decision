@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import api from '../../api/order.ts'
+import api, { sanitizeRequest } from '../../api/order.ts'
 import { findBanned } from '../../src/banned.ts'
 import { CARD_BY_ID } from '../../src/cards.ts'
 import { clusterKeys } from '../../src/chains.ts'
@@ -36,6 +36,18 @@ const placesOk = () =>
     { status: 200 },
   )
 
+// R3 修正 S-7：足量池子（5 家營業中）→ 只打 1 次 Places。阿財評分最高；其他 4 家在記憶裡標「不再推薦」，
+// 硬過濾後只剩阿財——呼叫次數看的是候選數（5 家 ≥ MIN_VALID），挑誰是確定的。
+const FIVE: RawPlace[] = [
+  { id: 'p1', displayName: { text: '阿財魯肉飯' }, location: { latitude: 25.0335, longitude: 121.5658 }, currentOpeningHours: { openNow: true }, rating: 4.8, userRatingCount: 500 },
+  ...[2, 3, 4, 5].map((n): RawPlace => ({
+    id: `p${n}`, displayName: { text: `測試麵館${n}號` }, location: { latitude: 25.0335, longitude: 121.5658 + n * 0.0003 },
+    currentOpeningHours: { openNow: true }, rating: 4.0, userRatingCount: 50,
+  })),
+]
+const placesFive = () => new Response(JSON.stringify({ places: FIVE }), { status: 200 })
+const FIVE_MEM: PlaceMemSummary[] = [2, 3, 4, 5].map((n) => ({ id: `p${n}`, sh: [], dn: [], x: 'forever' as const }))
+
 const post = (body: Partial<OrderRequest>) =>
   new Request('http://localhost/api/order', {
     method: 'POST',
@@ -61,15 +73,15 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('/api/order handler（第 12 節 S5）', () => {
   it('正常路徑：回 200 + 合法 Order JSON', async () => {
-    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON)))
-    const res = await handler(post({ loc: { lat: 25.033, lng: 121.5654 } }))
+    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON), placesFive))
+    const res = await handler(post({ loc: { lat: 25.033, lng: 121.5654 }, mem: FIVE_MEM }))
     expect(res.status).toBe(200)
     const order = (await res.json()) as Order
     expect(order.verdict).toBe('do')
     expect(order.meme.big).toBe('阿財魯肉飯')
     expect(order.steps.length).toBeGreaterThan(0)
-    // Round 3：這個 mock 只有 1 家店，< 5 家有效候選 → 第二次（restaurant、半徑 2000）。足量池子只打 1 次的情形見下方 B1／B5。
-    expect(res.headers.get('x-places-calls')).toBe('2')
+    // R3 修正 S-7：mock 回 5 家營業中 → 有效候選夠，只打 1 次。
+    expect(res.headers.get('x-places-calls')).toBe('1')
   })
 
   it('Claude 回 fenced JSON 也能吃', async () => {
@@ -162,13 +174,14 @@ describe('/api/order handler（第 12 節 S5）', () => {
 
   // 除錯畫面（長按班長名牌）的資料來源：Vercel log 保存期太短，這份跟著回應送到手機上。
   it('成功時回應帶 debug：查了幾圈、候選與評分、挑中誰、各段幾毫秒', async () => {
-    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON)))
-    const res = await handler(post({}))
+    vi.stubGlobal('fetch', routed(() => claudeOk(ORDER_JSON), placesFive))
+    const res = await handler(post({ mem: FIVE_MEM }))
     const body = (await res.json()) as Order & { debug: OrderDebug }
     expect(body.debug.module).toBe('eat')
     expect(body.debug.model).toBe('claude-haiku-4-5')
-    expect(body.debug.places?.how).toMatch(/^lane=\S+ rank=(POPULARITY|DISTANCE) → lane=restaurant rank=(POPULARITY|DISTANCE)$/)
-    expect(body.debug.places?.tries).toEqual([{ r: 800, raw: 1, kept: 1 }, { r: 2000, raw: 1, kept: 1 }])
+    // R3 修正 S-7：5 家營業中 → 只查 1 圈，tries 回到 1 筆
+    expect(body.debug.places?.how).toMatch(/^lane=\S+ rank=(POPULARITY|DISTANCE)$/)
+    expect(body.debug.places?.tries).toEqual([{ r: 800, raw: 5, kept: 5 }])
     expect(body.debug.places?.candidates[0]).toMatchObject({ name: '阿財魯肉飯' })
     expect(body.debug.picked).toBe('阿財魯肉飯')
     expect(body.debug.ms?.total).toBeGreaterThanOrEqual(0)
@@ -336,9 +349,12 @@ describe('Round 3：店由程式決定（B5、T2）', () => {
     const user = sent.messages[0]!.content
     expect(sent.max_tokens).toBe(600)
     expect(user).toContain('【店已決定】')
-    expect(user).toContain(`place.id=${body.place!.id}`)
-    const mentioned = POOL.filter((p) => user.includes(`id=${p.id} `) || user.includes(`id=${p.id}　`))
-    expect(mentioned.map((p) => p.id)).toEqual([body.place!.id])
+    // R3 修正 S-9（Team Lead 授權調整）：只帶那一家的店名；place.id 不送給模型，任何候選的 id 都不出現
+    expect(user).toContain(`place.name=${body.place!.name}`)
+    expect(user).not.toContain('place.id=')
+    expect(POOL.filter((p) => new RegExp(`(^|[^\\w])${p.id}([^\\w]|$)`).test(user)).map((p) => p.id)).toEqual([])
+    const names = POOL.filter((p) => user.includes(p.displayName!.text!)).map((p) => p.id)
+    expect(names).toEqual([body.place!.id])
     expect(user).not.toContain('候選店家')
   })
 })
@@ -460,5 +476,78 @@ describe('Round 3：Places 呼叫規則', () => {
       const res = await handler(post({ seed, mem: [{ id: 'g1', sh: [], dn: [], x: 'forever' }, { id: 'g2', sh: [], dn: [], x: Date.parse('2026-12-01') }], exclude: ['g3'] }))
       expect(banned).not.toContain(((await res.json()) as Body).place!.id)
     }
+  })
+})
+
+// ── Round 3 修正（fix-brief SERVER 組）────────────────────────────────
+describe('R3 修正 S-1：不查店的卡，模型編的 place 不准流到前端', () => {
+  beforeEach(() => { vi.spyOn(console, 'info').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}) })
+
+  it('go 卡＋模型帶 place → 回應沒有 place（也沒有 mapUrl）', async () => {
+    const f = routed(() => claudeOk(ORDER_JSON))
+    vi.stubGlobal('fetch', f)
+    const res = await handler(post({ module: 'go', choices: { transport: '捷運', minutes: '30 分' } }))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as Body
+    expect(body.place).toBeUndefined()
+    expect('place' in body).toBe(false)
+    expect(JSON.stringify(body)).not.toContain('"id":"p1"')
+    expect(JSON.stringify(body)).not.toContain('mapUrl')
+    expect(body.debug.picked).toBeUndefined()
+    for (const call of f.mock.calls) expect(String(call[0])).not.toContain('googleapis')
+  })
+})
+
+describe('R3 修正 S-4：入口清洗（在任何 Places 呼叫之前）', () => {
+  beforeEach(() => { vi.spyOn(console, 'info').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}) })
+
+  it("now:'x' → 400 {error:'bad_request'} JSON，不打 Places 也不打 Claude", async () => {
+    for (const now of ['x', 12345, { a: 1 }] as unknown as string[]) {
+      const f = routed(() => claudeOk(ORDER_JSON))
+      vi.stubGlobal('fetch', f)
+      const res = await handler(post({ now }))
+      expect(res.status).toBe(400)
+      expect(res.headers.get('content-type')).toContain('application/json')
+      expect(((await res.json()) as { error: string }).error).toBe('bad_request')
+      expect(f).not.toHaveBeenCalled()
+    }
+  })
+
+  it("mem:'oops' 與其他亂填欄位 → 不 crash，照樣 200 出口令", async () => {
+    vi.stubGlobal('fetch', poolFetch())
+    const junk = {
+      mem: 'oops', cuisine: [1, 2], novelty: 'yolo', exclude: 'g3', rejectedCuisines: 5, budget: 'cheap', recentOrders: 'none', choices: null, level: 9,
+    } as unknown as Partial<OrderRequest>
+    const res = await handler(post({ ...junk, seed: 9 }))
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as Body
+    expect(POOL.some((p) => p.id === body.place!.id)).toBe(true)
+  })
+
+  it('sanitizeRequest：mem 截 200 筆、sh/dn 只留有限數字、x 只收數字或 forever、dc 只收非負整數；cuisine／budget／novelty／exclude 收斂', () => {
+    const mem = [
+      { id: 'a', sh: [1, 'x', null, Infinity, 2], dn: 'nope', x: 'tomorrow', dc: -1, fav: 'yes', b: 7 },
+      { id: 'b', sh: [], dn: [3], x: 'forever', dc: 7, fav: true, b: 'mos' },
+      { id: 'c', sh: [], dn: [], x: 99, dc: 2.5 },
+      { sh: [1] }, 'str', null,
+      ...Array.from({ length: 300 }, (_, i) => ({ id: `m${i}`, sh: [], dn: [] })),
+    ]
+    const out = sanitizeRequest({
+      module: 'eat', level: 1, choices: { diet: '都可以', bad: { x: 1 } }, now: '2026-09-11T12:40:00+08:00', recentOrders: [],
+      mem, cuisine: { ramen: [2, 1], jp: [1, 'x'], cn: [NaN, 1], tw: [1, 2, 3] }, novelty: 'nope', budget: [4, 2, 2, 0, 1.5, '3'],
+      exclude: ['g1', 3, '', 'g2'], rejectedCuisines: 'ramen',
+    } as unknown as OrderRequest)
+    expect(out.mem!.length).toBeLessThanOrEqual(200)
+    expect(out.mem![0]).toEqual({ id: 'a', sh: [1, 2], dn: [] })
+    expect(out.mem![1]).toEqual({ id: 'b', sh: [], dn: [3], x: 'forever', dc: 7, fav: true, b: 'mos' })
+    expect(out.mem![2]).toEqual({ id: 'c', sh: [], dn: [], x: 99 })
+    expect(out.mem!.every((m) => typeof m.id === 'string')).toBe(true)
+    expect(out.cuisine).toEqual({ ramen: [2, 1] })
+    expect(out.novelty).toBe('balanced')
+    expect(out.budget).toEqual([2, 4])
+    expect(out.exclude).toEqual(['g1', 'g2'])
+    expect(out.rejectedCuisines).toEqual([])
+    expect(out.choices).toEqual({ diet: '都可以' })
+    expect(sanitizeRequest({ module: 'eat', level: 1, choices: {}, now: '', recentOrders: [], exclude: Array.from({ length: 500 }, (_, i) => `e${i}`) } as unknown as OrderRequest).exclude!.length).toBe(50)
   })
 })

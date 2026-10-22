@@ -11,7 +11,7 @@ import { cuisineOf, mulberry32, pickPlace, type PickOutcome } from '../src/disco
 import { bandOf, countryOf, currencyCountry, priceText } from '../src/price.ts'
 import { brandKeyOf, clusterKeys } from '../src/chains.ts'
 import { hourIn, tzOf } from '../src/tz.ts'
-import type { Country, Order, OrderDebug, OrderRequest, PickResult, PlaceCandidate } from '../src/types.ts'
+import type { Band, Country, CuisineStats, Order, OrderDebug, OrderRequest, PickResult, PlaceCandidate, PlaceMemSummary } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
 
@@ -33,6 +33,86 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 /** 有效候選少於這個數就發第二次 Places（DEV-PLAN-3 W1.7）。 */
 const MIN_VALID = 5
 
+// ── 入口清洗（R3 修正 S-4）──────────────────────────────────────────
+const MAX_MEM = 200
+const MAX_EVENTS = 20
+const MAX_ID = 256
+const MAX_EXCLUDE = 50
+const MAX_REJECTED = 20
+const MAX_RECENT = 50
+const MAX_CUISINE = 50
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const shortStr = (v: unknown, max = MAX_ID): v is string => typeof v === 'string' && v.length > 0 && v.length <= max
+/** 字串陣列：不是陣列 → []；只留非空短字串、截長度。 */
+const strList = (v: unknown, max: number): string[] => (Array.isArray(v) ? v.filter((s) => shortStr(s)).slice(0, max) : [])
+
+function cleanMem(v: unknown): PlaceMemSummary[] {
+  if (!Array.isArray(v)) return []
+  const out: PlaceMemSummary[] = []
+  for (const m of v.slice(0, MAX_MEM)) {
+    if (!isRecord(m) || !shortStr(m.id)) continue
+    const nums = (a: unknown) => (Array.isArray(a) ? a.filter(finite).slice(0, MAX_EVENTS) : [])
+    const e: PlaceMemSummary = { id: m.id, sh: nums(m.sh), dn: nums(m.dn) }
+    if (m.x === 'forever' || finite(m.x)) e.x = m.x
+    if (typeof m.dc === 'number' && Number.isSafeInteger(m.dc) && m.dc >= 0) e.dc = m.dc
+    if (m.fav === true) e.fav = true
+    if (shortStr(m.b, 64)) e.b = m.b
+    out.push(e)
+  }
+  return out
+}
+
+function cleanCuisine(v: unknown): CuisineStats | undefined {
+  if (!isRecord(v)) return undefined
+  // Object.fromEntries 建的是自有屬性：鍵是 "__proto__" 也不會改到原型。
+  const entries = Object.entries(v)
+    .filter((kv): kv is [string, [number, number]] => kv[0].length <= 64 && Array.isArray(kv[1]) && kv[1].length === 2 && finite(kv[1][0]) && finite(kv[1][1]))
+    .slice(0, MAX_CUISINE)
+    .map(([k, [a, b]]) => [k, [a, b]] as [string, [number, number]])
+  return Object.fromEntries(entries)
+}
+
+function cleanBudget(v: unknown): Band[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const bands = [...new Set(v.filter((b): b is Band => Number.isInteger(b) && b >= 1 && b <= 4))].sort((a, b) => a - b)
+  return bands.length ? bands : undefined
+}
+
+/**
+ * 前端送什麼都不信：形狀不對的欄位收斂成安全預設，不讓後面 pickPlace／prompt 炸掉或吃到怪值。
+ * now 不可解析在呼叫端就回 400（這裡只補缺省）。mem／exclude 只當 id 比對，不記 log。
+ */
+export function sanitizeRequest(raw: OrderRequest): OrderRequest {
+  const r = raw as unknown as Record<string, unknown>
+  const loc = isRecord(r.loc) && finite(r.loc.lat) && finite(r.loc.lng) ? { lat: r.loc.lat, lng: r.loc.lng } : undefined
+  const choices: Record<string, string | number> = {}
+  if (isRecord(r.choices)) for (const [k, v] of Object.entries(r.choices)) if (typeof v === 'string' || finite(v)) choices[k] = v
+  const recentOrders = Array.isArray(r.recentOrders)
+    ? (r.recentOrders as unknown[]).filter((o): o is OrderRequest['recentOrders'][number] => isRecord(o) && typeof o.module === 'string' && typeof o.big === 'string' && typeof o.at === 'string').slice(0, MAX_RECENT)
+    : []
+  const novelty = r.novelty === 'familiar' || r.novelty === 'balanced' || r.novelty === 'recon' ? r.novelty : 'balanced'
+  const out: OrderRequest = {
+    module: raw.module,
+    level: r.level === 0 || r.level === 1 || r.level === 2 ? r.level : 1,
+    choices,
+    now: typeof r.now === 'string' && r.now ? r.now : new Date().toISOString(),
+    exclude: strList(r.exclude, MAX_EXCLUDE),
+    recentOrders,
+    novelty,
+    mem: cleanMem(r.mem),
+    rejectedCuisines: strList(r.rejectedCuisines, MAX_REJECTED),
+  }
+  if (loc) out.loc = loc
+  const budget = cleanBudget(r.budget)
+  if (budget) out.budget = budget
+  const cuisine = cleanCuisine(r.cuisine)
+  if (cuisine) out.cuisine = cuisine
+  if (finite(r.seed)) out.seed = r.seed
+  return out
+}
+
 async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)
 
@@ -42,11 +122,14 @@ async function handler(request: Request): Promise<Response> {
   } catch {
     return json({ error: 'bad_request', message: '請求不是合法 JSON' }, 400)
   }
-  if (!req?.module || !CARD_BY_ID[req.module]) {
+  if (!req || typeof req !== 'object' || Array.isArray(req) || typeof req.module !== 'string' || !Object.hasOwn(CARD_BY_ID, req.module)) {
     return json({ error: 'bad_request', message: '未知的模組' }, 400)
   }
-  req.recentOrders ??= []
-  req.now ||= new Date().toISOString()
+  // 入口清洗（R3 修正 S-4）：在任何 Places／Claude 呼叫之前，把前端送來的欄位收斂成合法形狀。
+  if (req.now !== undefined && req.now !== null && req.now !== '' && (typeof req.now !== 'string' || Number.isNaN(Date.parse(req.now)))) {
+    return json({ error: 'bad_request', message: '時間格式不對' }, 400)
+  }
+  req = sanitizeRequest(req)
 
   const card = CARD_BY_ID[req.module]
   const now = new Date(req.now)

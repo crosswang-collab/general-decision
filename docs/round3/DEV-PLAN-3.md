@@ -709,9 +709,11 @@ export function localizeFields<T extends object>(obj: T, paths: (keyof T & strin
 ### 附錄 2　prompt 新段落（W1 的起點，可微調措辭不可改語意）
 
 ```
-【店已決定】place.id={id}　place.name={name}　步行 {walkMin} 分　{營業到 HH:MM | HH:MM 開}　價位：{priceText | 價位未知}
+【店已決定】place.name={name}　步行 {walkMin} 分　{營業到 HH:MM | HH:MM 開}　價位：{priceText | 價位未知}
 mode={new|revisit|wildcard}　這是使用者第 {visits} 次被派到這家。
 你只負責寫口令：meme.big 就是這家店名（≤10 字，太長用店家慣稱）。
 mode=new 要在 meme.top 或 meme.bot 講這家他沒去過；revisit 要講「第 {visits} 次」；wildcard 要講這是偵察任務。
 禁止提到任何別家店或類別；禁止寫出「價位」以外的金額；禁止寫連結。
 ```
+
+> Round 3 修正 S-9（Team Lead 授權）：範本拿掉 `place.id={id}`——模型用不到店家代碼，`place.id` 只由 `withPlace` 填。

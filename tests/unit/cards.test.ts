@@ -43,8 +43,8 @@ describe('cards（第 13.1 節）', () => {
         if (f.type === 'chips') {
           expect(f.options, `${c.id}.${f.key} 缺 options`).toBeDefined()
           expect(f.options, `${c.id}.${f.key} default 不在 options`).toContain(f.default)
-        } else {
-          // stars：1–5 的整數
+        } else if (f.type === 'stars') {
+          // stars：1–5 的整數（Round 3 的 bands 列沒有 options，值走 OrderRequest.budget，DEV-PLAN-3 §E.3）
           expect(typeof f.default).toBe('number')
           expect(f.default as number).toBeGreaterThanOrEqual(1)
           expect(f.default as number).toBeLessThanOrEqual(5)

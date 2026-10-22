@@ -2,19 +2,10 @@
 import { OFFICER_BY_LEVEL, sampleCorpus } from './officers.ts'
 import { CARD_BY_ID } from './cards.ts'
 import { attendVerdict, buyVerdict, lightsOut } from './rules.ts'
-import type { Level, ModuleId, OrderRequest } from './types.ts'
+import type { Level, ModuleId, OrderRequest, PlaceCandidate } from './types.ts'
 
-export interface PlaceCandidate {
-  id: string
-  name: string
-  walkMin?: number
-  openUntil?: string
-  /** 尚未開門但 60 分內會開：HH:MM。 */
-  opensAt?: string
-  primaryType?: string
-  rating?: number
-  ratingCount?: number
-}
+// Round 3：PlaceCandidate 搬到 types.ts（DEV-PLAN-3 §B.1），這裡轉出口讓既有 import 不用動。
+export type { PlaceCandidate } from './types.ts'
 
 export const ORDER_SYSTEM_PROMPT = `你是台灣 1990–2000 年代軍教片裡的班長。三種火力，由 level 決定：
 level 0「菜鳥班長 阿良」：剛下部隊，兇不起來，會結巴、會冒汗、講「你各位」會軟掉。

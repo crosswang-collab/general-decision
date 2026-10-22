@@ -1,59 +1,164 @@
-// 資料模型 — DECIDE-DEV-DOC-v1.md 第 5 節，照抄。
+// 資料模型 — DECIDE-DEV-DOC-v1.md 第 5 節；Round 3（DEV-PLAN-3 §B）加發掘／價位／記憶欄位。
 
 export type Level = 0 | 1 | 2 // 菜鳥班長 / 值星班長 / 士官長
 export type ModuleId = 'eat' | 'go' | 'attend' | 'rest' | 'sleep' | 'reply' | 'buy' | 'travel'
 
+// ── Round 3：地區、價位、發掘 ──────────────────────────────────────
+/** 由座標判定（src/price.ts countryOf），不看手機語系。other = 台日以外：預算列隱藏、不顯示幣別。 */
+export type Country = 'TW' | 'JP' | 'other'
+/** 價位檔（每人每餐）：1 銅板 / 2 一般 / 3 犒賞 / 4 豪賞。切點在 src/price.ts CUTS（R3§4.2）。 */
+export type Band = 1 | 2 | 3 | 4
+export type PriceLevel =
+  | 'PRICE_LEVEL_UNSPECIFIED' | 'PRICE_LEVEL_FREE' | 'PRICE_LEVEL_INEXPENSIVE'
+  | 'PRICE_LEVEL_MODERATE' | 'PRICE_LEVEL_EXPENSIVE' | 'PRICE_LEVEL_VERY_EXPENSIVE'
+/** 偵察方針（持久設定，首頁切換）：熟門熟路 / 均衡（預設）/ 全面偵察。 */
+export type Novelty = 'familiar' | 'balanced' | 'recon'
+/** 這家店對使用者是新的、回訪的、還是偵察抽到的。伺服器算，模型只負責講。 */
+export type PickMode = 'new' | 'revisit' | 'wildcard'
+/** 換一家的原因（A4）。 */
+export type ReissueReason = 'closed' | 'not_this_kind' | 'never_again'
+
+/** Places 回來、經 toCandidates 整理後的一家店（原本在 prompt.ts，Round 3 移到這裡）。只活在單次請求，不落地。 */
+export interface PlaceCandidate {
+  id: string
+  name: string
+  walkMin?: number
+  openUntil?: string
+  /** 尚未開門但 60 分內會開：HH:MM（當地時間）。 */
+  opensAt?: string
+  primaryType?: string
+  types?: string[]
+  rating?: number
+  ratingCount?: number
+  priceLevel?: PriceLevel
+  /** Google priceRange；start 含、end 不含；end 缺 = 無上限。 */
+  priceRange?: { start?: number; end?: number; currency?: string }
+  /** 這家是哪條 lane 撈到的（src/lanes.ts），除錯用。 */
+  lane?: string
+}
+
+/** 送到伺服器的記憶摘要：只有 place_id、我方事件時間戳、我方品牌鍵。沒有店名、評分、座標（R3§3.3）。 */
+export interface PlaceMemSummary {
+  id: string
+  /** 最近 ≤5 次被出成口令的時間戳（ms），新的在前。 */
+  sh: number[]
+  /** 最近 ≤5 次回報完成的時間戳（ms），新的在前。 */
+  dn: number[]
+  /** 不再出現直到（ms）；'forever' = 永久。 */
+  x?: number | 'forever'
+  fav?: boolean
+  /** 我方連鎖字典的品牌鍵（src/chains.ts）。同品牌曝光合併計算。 */
+  b?: string
+}
+
+/** 本機 IndexedDB 的完整記憶（src/placeMem.ts）。 */
+export interface PlaceMemEntry {
+  id: string
+  module: 'eat' | 'rest'
+  shown: number[] // ≤ 10，新的在前
+  done: number[] // ≤ 10，新的在前
+  dislikeUntil?: number | 'forever'
+  dislikes: number // never_again 次數；第 2 次 → forever
+  fav?: boolean
+  brand?: string // 我方品牌鍵
+  cuisine?: string // 細類鍵（src/discovery.ts cuisineOf）
+}
+
+/** 細類偏好 Beta(a,b)，初值 (1,1)。key 由 cuisineOf 產生，是我方歸群，不是 Google 內容。 */
+export type CuisineStats = Record<string, [number, number]>
+
+export interface PickResult {
+  place: PlaceCandidate
+  mode: PickMode
+  /** 過去 done 次數 + 1（revisit 時口令講「第 N 次」）。 */
+  visits: number
+  /** 哪些硬過濾被放寬了（'floor' | 'cooldown' | 'price' | 'dislike'）。非空就要 console.warn。 */
+  relaxed: string[]
+  /** recon 下附近已無曝光為 0 的店。 */
+  exhausted: boolean
+}
+
 export interface IntakeField {
-  key: string // 'diet' | 'transport' | 'minutes' | 'occasion' | 'stars' ...
-  label: string // 顯示：忌口 / 交通 / 可接受 ...
-  type: 'chips' | 'stars'
-  options?: string[] // chips 用
+  key: string // 'diet' | 'transport' | 'minutes' | 'occasion' | 'stars' | 'budget' ...
+  label: string
+  /** chips 單選；stars 1–5；bands = 價位檔多選（只在 eat）：options 留空，標籤由 src/price.ts bandLabels(country) 依國家產生，值走 OrderRequest.budget 不走 choices。 */
+  type: 'chips' | 'stars' | 'bands'
+  options?: string[]
   default: string | number
 }
 
 export interface ModuleCard {
   id: ModuleId
-  title: string // 吃 / 去 / 赴 / 歇 / 幾點睡 / 這訊息現在回嗎 / 買不買 / 飛
+  title: string
   subtitle: string
   intake: IntakeField[]
-  needsPlaces: boolean // eat, rest = true
+  needsPlaces: boolean
   placesQuery?: {
     includedTypes: string[]
     radiusByTransport?: Record<string, number>
-    /** 有這個就改走 Text Search：依 intake 某個 key 的選項對到中文關鍵字（居酒屋、熱炒沒有對應的 Places type）。 */
     textQuery?: { key: string; byOption: Record<string, string> }
   }
-  promptHint: string // 給 Claude 的模組專屬規則（第 6 節）
-  reissueLabel: string | null // '店關了' | '路封了' | null
-  stopVerdictAllowed: boolean // buy=true（可以「不買」）, attend=true（可以「不去」）
+  promptHint: string
+  reissueLabel: string | null // Round 3：eat / rest 改「換一家」，原因在底部選單
+  stopVerdictAllowed: boolean
 }
 
 export interface OrderRequest {
   module: ModuleId
   level: Level
   choices: Record<string, string | number>
-  loc?: { lat: number; lng: number; label?: string } // 無定位權限時 undefined
+  loc?: { lat: number; lng: number; label?: string }
   now: string // ISO，含時區
-  exclude?: string[] // 換口令時帶上一家 place_id
-  recentOrders: { module: ModuleId; big: string; at: string }[] // 近 7 天，讓班長講「這週第二次」
+  /** 本次操作已出現過的 place_id（換一家）。語意不變。 */
+  exclude?: string[]
+  recentOrders: { module: ModuleId; big: string; at: string }[]
+  // ── Round 3 ──
+  /** 相鄰檔位、升冪；undefined 或 [] = 不限。 */
+  budget?: Band[]
+  /** 缺省 'balanced'。 */
+  novelty?: Novelty
+  /** ≤ 200 筆，依最近事件時間排序。伺服器不落地、log 不記 id。 */
+  mem?: PlaceMemSummary[]
+  cuisine?: CuisineStats
+  /** 本次操作「今天不想吃這類」的細類鍵。 */
+  rejectedCuisines?: string[]
+  /** 只給測試／重播用的固定種子；正式前端不帶。 */
+  seed?: number
 }
 
 export interface Order {
-  // Claude 必須回這個 JSON，不多不少
-  verdict: 'do' | 'stop' // stop = 不去／不買，用紅卡
-  meme: { top: string; big: string; bot: string } // top ≤ 16 字, big ≤ 10 字, bot ≤ 24 字
-  steps: string[] // 1–3 條，每條 ≤ 22 字，可執行、無梗
-  // mapUrl 只由伺服器端用 Places 真實 id 組出來（api/order.ts withPlace），模型不准填（DEV-PLAN-2 規則 8）。
-  place?: { id: string; name: string; walkMin?: number; openUntil?: string; mapUrl?: string }
-  log: string // 完成後登記文字，≤ 30 字，描述式，不誇
+  verdict: 'do' | 'stop'
+  meme: { top: string; big: string; bot: string }
+  steps: string[]
+  // mapUrl 與 Round 3 欄位只由伺服器填（api/order.ts withPlace）；模型寫的一律被 enforceRules 丟掉。
+  place?: {
+    id: string
+    name: string
+    walkMin?: number
+    openUntil?: string
+    opensAt?: string
+    mapUrl?: string
+    mode?: PickMode
+    visits?: number
+    /** null = 價位未知（口令卡要顯示「價位未知」）。 */
+    band?: Band | null
+    /** 直接由 Google 當次回傳值組成的顯示字串（例「≈NT$150–400」「≈¥1,000〜2,500」）。不落地保存。 */
+    priceText?: string
+    country?: Country
+    cuisine?: string
+    brand?: string
+    exhausted?: boolean
+  }
+  log: string
 }
 
-/**
- * 一次 /api/order 的真實經過，跟著回應送回前端存起來（src/debug.ts）。
- * 存在的理由：Vercel 免費方案的 runtime log 留很短，隔夜就查不到，
- * 而「店家為什麼拿不到」這種問題永遠是事後才被發現的。這份跟著手機走。
- * 不屬於 Order 本體，前端收到就從 Order 上剝掉，不會進日記。
- */
+/** enforceRules 的 Round 3 上下文（api/order.ts 組，純函式不碰 I/O）。 */
+export interface EnforceCtx {
+  level: Level
+  country: Country
+  pick?: PickResult | null
+}
+
 export interface OrderDebug {
   module: ModuleId
   level: Level
@@ -61,30 +166,55 @@ export interface OrderDebug {
   ms?: { places: number; claude: number; total: number }
   outTokens?: number
   places?: {
-    how: string // 'text="居酒屋"' 或 'types=restaurant'
-    tries: { r: number; raw: number; kept: number }[] // raw = -1 代表這一圈查失敗
-    candidates: { name: string; rating?: number; count?: number; walkMin?: number; openUntil?: string; opensAt?: string }[]
+    how: string // 'lane=ramen_restaurant rank=DISTANCE' 或 'text="居酒屋"'
+    tries: { r: number; raw: number; kept: number }[]
+    candidates: { name: string; rating?: number; count?: number; walkMin?: number; openUntil?: string; opensAt?: string; band?: number | null }[]
   }
-  retry?: 'nonanswer' | 'noplace' // 模型被重打的原因
-  forced?: string // 伺服器強制指定的店名
-  picked?: string // 最後用的店名
+  /** Round 3：發掘引擎的決定過程。不含 place_id。 */
+  pick?: { mode: PickMode; lane: string; pool: number; afterFilter: number; relaxed: string[]; exhausted: boolean; seed?: number }
+  /** Round 3：候選中有價位資料的比例（R3§4.3 第一週遙測）。 */
+  price?: { country: Country; known: number; total: number }
+  retry?: 'nonanswer' | 'noplace'
+  forced?: string
+  picked?: string
   error?: string
 }
 
 export interface DiaryEntry {
-  id: string // `${ts}-${module}`  冪等鍵
+  id: string // `${ts}-${module}`
   ts: string
   module: ModuleId
   level: Level
   big: string
+  /** @deprecated Round 3 起不再寫入（Google 條款 R3§3.3）；只為讀舊資料保留，顯示時 fallback 到 big。 */
   placeName?: string
+  /** Round 3：之後靠這個對回 PlaceMem（愛店／不再推薦）。 */
+  placeId?: string
   outcome: 'done' | 'reissued' | 'punished'
+  reason?: ReissueReason
+  mode?: PickMode
+}
+
+export interface WeeklyRequest {
+  weekStart: string
+  level: Level
+  entries: DiaryEntry[]
+  /** Round 3：前端由 PlaceMem 算好（B1），伺服器只轉述。 */
+  discovery?: { newPlaces: number; revisits: number }
 }
 
 export interface WeeklyReport {
   weekStart: string
   level: Level
-  stats: { orders: number; complianceRate: number; punishments: number; weakestModule: ModuleId | null }
-  body: string // ≤ 180 字，班長口吻，含至少一個規律觀察 + 一個下週對策
-  verdict: string // ≤ 14 字，例：「本週講評：合格。屁股記過一次。」
+  stats: {
+    orders: number; complianceRate: number; punishments: number; weakestModule: ModuleId | null
+    /** Round 3：本週新占領／回防。 */
+    newPlaces?: number; revisits?: number
+  }
+  body: string
+  verdict: string
 }
+
+/** C2：沒有定位時手動報地點。伺服器用 Text Search 換座標，不落地。 */
+export interface GeocodeRequest { q: string }
+export interface GeocodeResponse { loc: { lat: number; lng: number }; label: string }

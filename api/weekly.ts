@@ -3,7 +3,7 @@ import { WEEKLY_SYSTEM_PROMPT, levelName, moduleTitle } from '../src/prompt.ts'
 import { parseWeekly, ParseError } from '../src/orderParse.ts'
 import { stats } from '../src/diary.ts'
 import { localizeWeeklyText } from '../src/rules.ts'
-import type { DiaryEntry, Level, WeeklyReport } from '../src/types.ts'
+import type { Level, WeeklyReport, WeeklyRequest } from '../src/types.ts'
 
 export const config = { runtime: 'nodejs' }
 
@@ -15,12 +15,6 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
-
-interface WeeklyRequest {
-  weekStart: string
-  level: Level
-  entries: DiaryEntry[]
-}
 
 async function handler(request: Request): Promise<Response> {
   if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405)

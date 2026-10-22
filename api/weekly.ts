@@ -30,7 +30,9 @@ async function handler(request: Request): Promise<Response> {
   const weekStart = req?.weekStart ?? new Date().toISOString()
 
   // 數字在這裡算，不外包給模型；Claude 只負責 body 與 verdict。
-  const s = stats(entries)
+  // Round 3：新占領／回防由前端從 PlaceMem 算好（伺服器沒有記憶），這裡只轉述；不合法的數字一律不採用。
+  const disc = validDiscovery(req?.discovery)
+  const s: WeeklyReport['stats'] = { ...stats(entries), ...(disc ? { newPlaces: disc.newPlaces, revisits: disc.revisits } : {}) }
 
   if (entries.length === 0) {
     const report: WeeklyReport = {
@@ -62,18 +64,25 @@ export function GET(request: Request): Promise<Response> { return handler(reques
 export function POST(request: Request): Promise<Response> { return handler(request) }
 export default { fetch: handler }
 
-function buildUser(req: WeeklyRequest, s: ReturnType<typeof stats>): string {
+function validDiscovery(d: WeeklyRequest['discovery']): { newPlaces: number; revisits: number } | null {
+  const ok = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < 1000
+  return d && ok(d.newPlaces) && ok(d.revisits) ? { newPlaces: d.newPlaces, revisits: d.revisits } : null
+}
+
+function buildUser(req: WeeklyRequest, s: WeeklyReport['stats']): string {
+  // Round 3：日記不再存 placeName（Google 條款，R3§3.3），一律用 big。
   const lines = req.entries
     .slice()
     .sort((a, b) => a.ts.localeCompare(b.ts))
-    .map((e) => `・${e.ts} ${moduleTitle(e.module)} ${e.placeName ?? e.big} → ${e.outcome}`)
+    .map((e) => `・${e.ts} ${moduleTitle(e.module)} ${e.big} → ${e.outcome}`)
   return [
     `本週開始：${req.weekStart}`,
     `火力：${levelName((req.level ?? 1) as Level)}`,
     `【已算好的數字，直接用，不要自己再算】口令 ${s.orders} 道、服從率 ${s.complianceRate}%、罰則 ${s.punishments} 次、最弱模組 ${s.weakestModule ?? '無'}`,
+    s.newPlaces !== undefined ? `【已算好】本週新占領 ${s.newPlaces} 個據點、回防 ${s.revisits} 次，直接用。` : '',
     `本週 entries：\n${lines.join('\n')}`,
     '只輸出 WeeklyReport JSON。',
-  ].join('\n\n')
+  ].filter(Boolean).join('\n\n')
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

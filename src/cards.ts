@@ -16,9 +16,9 @@ export const CARDS: ModuleCard[] = [
     // 甜食時伺服器端改查 bakery / cafe / ice_cream_shop（src/places.ts placesTypesFor）。
     placesQuery: { includedTypes: ['restaurant'], radiusByTransport: { default: 800 } },
     promptHint:
-      '從候選店挑一家，meme.big = 店名（≤10 字，太長就用店家慣稱）。steps 必須含「點什麼」與「幾分鐘內吃完」。' +
-      '使用者選「甜食」時候選店是甜點／麵包／咖啡店，點的東西要是甜的；選「鹹食」就不得點甜點當正餐。' +
-      '若 recentOrders 裡本週已有 eat，請在 meme.top 或 meme.bot 點出這週第幾次、吃了什麼，語氣照火力層。',
+      '店已由班長決定（見【店已決定】），meme.big = 店名（≤10 字，太長就用店家慣稱）。steps 必須含「點什麼」與「幾分鐘內吃完」。' +
+      '使用者選「甜食」時派的是甜點／麵包／咖啡店，點的東西要是甜的；選「鹹食」就不得點甜點當正餐。' +
+      'meme.top／meme.bot 先照 mode 講（沒去過／第 N 次／偵察），語氣照火力層；不要自己數這週吃了幾次。',
     reissueLabel: '換一家', // Round 3：原因（店關了／不想吃這類／不要再來）在底部選單
     stopVerdictAllowed: false,
   },
@@ -70,7 +70,7 @@ export const CARDS: ModuleCard[] = [
       textQuery: { key: 'drink', byOption: { 咖啡: '咖啡廳', 酒吧: '酒吧', 居酒屋: '居酒屋', 熱炒燒烤: '熱炒 燒烤' } },
     },
     promptHint:
-      '從候選店挑一家，meme.big = 店名。' +
+      '店已由班長決定（見【店已決定】），meme.big = 店名。meme.top／meme.bot 照 mode 講（沒去過／第 N 次／偵察）。' +
       '選「咖啡」：steps 三條為點什麼、坐幾分鐘、手機面朝下。' +
       '選「酒吧」「居酒屋」「熱炒燒烤」是喝酒：steps 三條為點什麼（含幾杯上限，最多兩杯）、幾點前離開、怎麼回家（不得開車騎車）。',
     reissueLabel: '換一家', // Round 3：原因（店關了／不想吃這類／不要再來）在底部選單

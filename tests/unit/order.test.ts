@@ -138,7 +138,8 @@ describe('Places 過濾（第 8 節）', () => {
     expect(c[0]!.openUntil).toBeUndefined()
   })
 
-  it('評價優先：貝氏平均把「5 星 3 則」壓到「4.4 星 800 則」後面；≥4.0 且 ≥10 則的有兩家以上就只留那些', () => {
+  // DEV-PLAN-3 §E.3：「≥4.0 且 ≥10 則就只留那些」與「好店不足兩家 → 不篩」合併——照貝氏排序但全部保留，品質保底移到 pickPlace。
+  it('評價優先：貝氏平均把「5 星 3 則」壓到「4.4 星 800 則」後面；照貝氏排序但全部保留（保底在 pickPlace）', () => {
     expect(ratingScore(5, 3)).toBeLessThan(ratingScore(4.4, 800))
     expect(ratingScore(undefined, undefined)).toBe(0)
     const rated: RawPlace[] = [
@@ -147,10 +148,7 @@ describe('Places 過濾（第 8 節）', () => {
       { id: 'c', displayName: { text: '普通' }, currentOpeningHours: { openNow: true }, rating: 4.1, userRatingCount: 40 },
       { id: 'd', displayName: { text: '差評' }, currentOpeningHours: { openNow: true }, rating: 3.2, userRatingCount: 200 },
     ]
-    expect(toCandidates(rated, origin, now).map((p) => p.id)).toEqual(['b', 'c'])
-  })
-
-  it('好店不足兩家 → 不篩，全部照評價排序給模型', () => {
+    expect(toCandidates(rated, origin, now).map((p) => p.id)).toEqual(['b', 'a', 'c', 'd'])
     const few: RawPlace[] = [
       { id: 'x', displayName: { text: '沒評分' }, currentOpeningHours: { openNow: true } },
       { id: 'y', displayName: { text: '有評分' }, currentOpeningHours: { openNow: true }, rating: 3.9, userRatingCount: 50 },
@@ -170,11 +168,37 @@ describe('Places 過濾（第 8 節）', () => {
     expect(toCandidates(raw, origin, now, ['p3']).map((p) => p.id)).toEqual(['p1'])
   })
 
-  it('算得出步行分鐘與今日打烊時間', () => {
+  it('算得出步行分鐘與今日打烊時間（tz 參數：台北結果不變）', () => {
     const c = toCandidates(raw, origin, now)[0]!
     expect(c.name).toBe('阿財魯肉飯')
     expect(c.walkMin).toBeGreaterThan(0)
     expect(c.openUntil).toBe('21:00')
+    expect(toCandidates(raw, origin, now, [], 'Asia/Taipei')[0]!.openUntil).toBe('21:00')
+    expect(closingTime(raw[0]!.regularOpeningHours!.weekdayDescriptions, now, 'Asia/Taipei')).toBe('21:00')
+  })
+
+  // B10（伺服器在 UTC）：「今天」與「幾點開」都以店家所在地算，不看伺服器時區。
+  it('closingTime／opensAt 用店家當地時區：台北 23:30（週四）＝東京 00:30（週五）', () => {
+    const desc = ['一: 11:00 – 21:00', '二: 11:00 – 21:00', '三: 11:00 – 21:00', '四: 11:00 – 22:00', '五: 11:00 – 23:30', '六: 休息', '日: 休息']
+    const t = new Date('2026-09-10T15:30:00Z')
+    expect(closingTime(desc, t, 'Asia/Taipei')).toBe('22:00')
+    expect(closingTime(desc, t, 'Asia/Tokyo')).toBe('23:30')
+    const soon: RawPlace[] = [{ id: 'j', displayName: { text: '居酒屋' }, currentOpeningHours: { openNow: false, nextOpenTime: '2026-09-10T16:00:00Z' } }]
+    expect(toCandidates(soon, origin, t, [], 'Asia/Tokyo')[0]!.opensAt).toBe('01:00')
+    expect(toCandidates(soon, origin, t, [], 'Asia/Taipei')[0]!.opensAt).toBe('00:00')
+  })
+
+  it('types／priceLevel／priceRange 帶進候選；Money 的 units＋nanos 轉成數字', () => {
+    const r: RawPlace[] = [{
+      id: 'm', displayName: { text: '有價位' }, currentOpeningHours: { openNow: true }, types: ['ramen_restaurant', 'restaurant'],
+      priceLevel: 'PRICE_LEVEL_MODERATE',
+      priceRange: { startPrice: { currencyCode: 'TWD', units: '200' }, endPrice: { currencyCode: 'TWD', units: '399', nanos: 500_000_000 } },
+    }, {
+      id: 'n', displayName: { text: '無上限' }, currentOpeningHours: { openNow: true }, priceRange: { startPrice: { currencyCode: 'JPY', units: 3000 } },
+    }]
+    const [m, n] = toCandidates(r, origin, now)
+    expect(m).toMatchObject({ types: ['ramen_restaurant', 'restaurant'], priceLevel: 'PRICE_LEVEL_MODERATE', priceRange: { start: 200, end: 399.5, currency: 'TWD' } })
+    expect(n!.priceRange).toEqual({ start: 3000, currency: 'JPY' })
   })
 
   it('步行分鐘：80 公尺/分，無條件進位', () => {

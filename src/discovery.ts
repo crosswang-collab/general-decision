@@ -102,7 +102,7 @@ export const PARAMS = {
   // 3/7 天讓 7 天重複率約 7%（門檻 15%），好店回來得比較快。
   halfShownDays: 3, // 曝光半衰期（被出成口令）
   halfDoneDays: 7, // 曝光半衰期（去過）
-  T: 0.25, // 溫度（R3 範圍 0.25–0.5）。重播調參：取下限，品質權重最大（bayesDrop 仍未達標，見 tests/unit/discovery-replay.test.ts）
+  T: 0.25, // 溫度（R3 範圍 0.25–0.5）。重播調參：取下限，品質權重最大（擋門的是 oracleGap ≤0.08，見 tests/unit/discovery-replay.test.ts）
   chain: 0.6,
   walkD: 25,
   rejected: 0.5,

@@ -551,3 +551,17 @@ describe('R3 修正 S-4：入口清洗（在任何 Places 呼叫之前）', () =
     expect(sanitizeRequest({ module: 'eat', level: 1, choices: {}, now: '', recentOrders: [], exclude: Array.from({ length: 500 }, (_, i) => `e${i}`) } as unknown as OrderRequest).exclude!.length).toBe(50)
   })
 })
+
+describe('R3R-2：伺服器截 mem 時封鎖與愛店優先', () => {
+  it('前 250 筆是一般紀錄、封鎖店排在後面 → 截到 200 筆後封鎖店與愛店仍在', () => {
+    const plain = Array.from({ length: 250 }, (_, i) => ({ id: `n${i}`, sh: [1], dn: [] }))
+    const out = sanitizeRequest({
+      module: 'eat', level: 1, choices: {}, now: new Date().toISOString(), recentOrders: [],
+      mem: [...plain, { id: 'blocked', sh: [1], dn: [], x: 'forever' }, { id: 'lover', sh: [1], dn: [], fav: true }],
+    } as never)
+    const ids = (out.mem ?? []).map((m) => m.id)
+    expect(ids).toHaveLength(200)
+    expect(ids).toContain('blocked')
+    expect(ids).toContain('lover')
+  })
+})

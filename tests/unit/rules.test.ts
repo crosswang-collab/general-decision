@@ -201,4 +201,18 @@ describe('S-6：營業時間照實（T6）', () => {
     const same = order({ top: '這家你沒去過' }, { steps: ['營業到 21:00，走。', '12:50 出發。'] })
     expect(run(same, pick('new', 1, {}, OPEN)).steps).toEqual(['營業到 21:00，走。', '12:50 出發。'])
   })
+
+  it('R3R-1：「開動／開吃／開飯／開始吃／關電視」不是營業語境，有沒有 opensAt／openUntil 都原樣保留', () => {
+    const steps = ['12:10 開動，12:30 吃完。', '12:05 開吃。', '12:00 開飯，別遲到。', '12:30 開始吃，手機收起來。', '12:50 關電視。']
+    for (const place of [OPEN, LATER, { ...PLACE, opensAt: '11:30', openUntil: '21:00' }]) {
+      const out = run(order({ top: '這家你沒去過', bot: '12:00 開動' }, { steps }), pick('new', 1, {}, place))
+      expect(out.steps).toEqual(steps)
+      expect(out.meme.bot).toBe('12:00 開動')
+    }
+  })
+
+  it('R3R-1：句尾單獨的「開」「關」仍算營業語境', () => {
+    const out = run(order({ top: '這家你沒去過' }, { steps: ['11:00 開，先去排。', '22:00 關。'] }), pick('new', 1, {}, { ...PLACE, opensAt: '11:30', openUntil: '21:00' }))
+    expect(out.steps).toEqual(['11:30 開，先去排。', '21:00 關。'])
+  })
 })

@@ -51,7 +51,11 @@ const strList = (v: unknown, max: number): string[] => (Array.isArray(v) ? v.fil
 function cleanMem(v: unknown): PlaceMemSummary[] {
   if (!Array.isArray(v)) return []
   const out: PlaceMemSummary[] = []
-  for (const m of v.slice(0, MAX_MEM)) {
+  // R3R-2：截到 200 筆時，封鎖（x）與愛店（fav）優先保留——「不要再來」的店不能因為記憶太長被擠掉。
+  const head = v.slice(0, MAX_MEM * 5)
+  const keep = (m: unknown) => isRecord(m) && (m.x !== undefined || m.fav === true)
+  const ordered = [...head.filter(keep), ...head.filter((m) => !keep(m))]
+  for (const m of ordered.slice(0, MAX_MEM)) {
     if (!isRecord(m) || !shortStr(m.id)) continue
     const nums = (a: unknown) => (Array.isArray(a) ? a.filter(finite).slice(0, MAX_EVENTS) : [])
     const e: PlaceMemSummary = { id: m.id, sh: nums(m.sh), dn: nums(m.dn) }

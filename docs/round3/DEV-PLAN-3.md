@@ -657,6 +657,12 @@ export function localizeFields<T extends object>(obj: T, paths: (keyof T & strin
 | `tests/unit/weekly.test.ts` | user prompt 內容 | 加 discovery 數字 |
 | `tests/e2e/paths.spec.ts` | :29 `toHaveText('店關了')` | `'換一家'`，再點 `reason-closed` |
 | `tests/e2e/*.spec.ts`（全部） | 開頭 | 加 `prime(page)` 設同意旗標 |
+| **Team Lead 補授權（2026-10-22 紅隊修正輪）** | | |
+| `tests/unit/price.test.ts` | `amountsIn('三十塊 / 50塊')` | `[]`：「塊」是量詞，不再當金額（紅隊 RL-1／R2-15，修正 S-2） |
+| `tests/unit/rules.test.ts` | 「steps／log 裡寫錯的第 N 次改成伺服器數字」 | 改成「steps／log 原樣保留」：只修 meme 上下行，否則「不要讓我說第二次」會被改壞（紅隊 RL-2，修正 S-3） |
+| `tests/e2e/cmd-layout.spec.ts` | 回報連結 `^mailto:` | 聯絡信箱未填時改走 GitHub issue 連結（紅隊 R2-07，修正 C-6） |
+| `tests/unit/discovery-replay.test.ts` | balanced `bayesDrop ≤ 0.15` | 改擋 `oracleGap ≤ 0.08`：原門檻與 `repeat7d < 0.15` 數學上互斥（上帝視角挑最好 20 家降幅已 0.175），bayesDrop 照印作紀錄 |
+| `src/discovery.ts` PARAMS | familiar λ=0.05、半衰期 3/7 天、balanced λ=0.8 | 熟門熟路語意即不怕回訪；半衰期由重播校正（見檔內註解） |
 
 ### E.4 環境與量測
 

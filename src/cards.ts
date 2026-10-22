@@ -10,7 +10,7 @@ export const CARDS: ModuleCard[] = [
       { key: 'diet', label: '忌口', type: 'chips', options: ['不辣', '不吃牛', '素', '都可以'], default: '都可以' },
       { key: 'taste', label: '想吃', type: 'chips', options: ['鹹食', '甜食', '都可以'], default: '都可以' },
       // Round 3：預算（每人每餐）。標籤依國家由 src/price.ts bandLabels() 產生，值走 OrderRequest.budget，不走 choices。
-      { key: 'budget', label: '預算', type: 'bands', default: '' },
+      { key: 'budget', label: '預算（每人）', type: 'bands', default: '' },
     ],
     needsPlaces: true,
     // 甜食時伺服器端改查 bakery / cafe / ice_cream_shop（src/places.ts placesTypesFor）。

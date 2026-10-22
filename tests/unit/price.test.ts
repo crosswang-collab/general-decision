@@ -309,3 +309,15 @@ describe('amountsIn', () => {
     }
   })
 })
+
+// Team Lead（2026-10-22）：W4 回報日本方框吃到韓國。挖掉韓國與海參崴，對馬、福岡、沖繩、北海道仍是日本。
+import { describe as d2, expect as e2, it as i2 } from 'vitest'
+import { countryOf as co } from '../../src/price.ts'
+d2('countryOf：日本方框不吃韓國／俄羅斯', () => {
+  i2('首爾、釜山、濟州、海參崴 → other', () => {
+    for (const p of [{ lat: 37.5665, lng: 126.978 }, { lat: 35.1796, lng: 129.0756 }, { lat: 33.4996, lng: 126.5312 }, { lat: 43.1155, lng: 131.8855 }]) e2(co(p)).toBe('other')
+  })
+  i2('對馬、福岡、那霸、札幌、與那國 → JP', () => {
+    for (const p of [{ lat: 34.2, lng: 129.29 }, { lat: 33.5902, lng: 130.4017 }, { lat: 26.2124, lng: 127.6809 }, { lat: 43.0618, lng: 141.3545 }, { lat: 24.4676, lng: 122.9877 }]) e2(co(p)).toBe('JP')
+  })
+})

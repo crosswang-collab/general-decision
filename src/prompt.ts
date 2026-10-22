@@ -47,7 +47,8 @@ export function buildOrderPrompt(req: OrderRequest, pick: PickResult | null, cou
 
   const user = [
     `現在時間：${req.now}`,
-    req.loc ? `使用者位置：${req.loc.lat},${req.loc.lng}${req.loc.label ? `（${req.loc.label}）` : ''}` : '使用者沒有給定位。依規則 6 降級，不得編造店名與距離。',
+    // 資料最小化（Team Lead，2026-10-22）：店已由伺服器挑好，模型用不到座標——只告訴它在哪個國家，不送經緯度、不送地點名稱。
+    req.loc ? `使用者人在${country === 'JP' ? '日本' : country === 'TW' ? '台灣' : '台灣與日本以外的地方'}。` : '使用者沒有給定位。依規則 6 降級，不得編造店名與距離。',
     country === 'JP' ? '使用者人在日本：交通講電車／地下鐵，不講捷運；金額只有日圓。' : '',
     `使用者的選擇：${JSON.stringify(req.choices, null, 0)}`,
     pick ? decidedBlock(req, pick, country) : '',
@@ -79,6 +80,8 @@ function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): st
     pick.exhausted ? '附近能偵察的新店都偵察完了，這次派的是已知據點。' : '',
     over ? '這家超出使用者選的預算一檔：在 meme.bot 講「超出預算一檔，我准了」。' : '',
     '禁止提到任何別家店或類別；禁止寫出「價位」以外的金額；禁止寫連結。',
+    // Team Lead 設計修訂：口令卡最上面已經印了店名、步行、營業、價位，steps 再講一次就是廢話。
+    '口令卡上已經印好店名、步行分鐘、營業時間、價位：steps 不要重複這些，只寫點什麼、怎麼吃、幾分鐘內吃完這類動作（「HH:MM 開」的店例外，要講幾點到）。',
   ].filter(Boolean).join('\n')
 }
 

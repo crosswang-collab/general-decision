@@ -318,6 +318,7 @@ export function App() {
     setBudgets((prev) => ({ ...prev, [country]: next }))
   }, [budgets, country, hideTop])
 
+  const [consentPrivacy, setConsentPrivacy] = useState(false)
   const accept = useCallback(() => {
     try { localStorage.setItem(CONSENT_KEY, CONSENT_VERSION) } catch { /* 寫不進去就只在這次有效 */ }
     setConsented(true)
@@ -326,7 +327,11 @@ export function App() {
   if (!consented) {
     return (
       <>
-        <main data-level={level}><Consent level={level} onAccept={accept} /></main>
+        <main data-level={level}>
+          {consentPrivacy
+            ? <Privacy onBack={() => setConsentPrivacy(false)} />
+            : <Consent level={level} onAccept={accept} onPrivacy={() => setConsentPrivacy(true)} />}
+        </main>
         <footer><span>班長有什麼了不起？— 你小學當的那個不算。</span></footer>
       </>
     )
@@ -490,6 +495,18 @@ function Home({ level, novelty = 'balanced', onCycle, onPick, onDiary, onDebug, 
   )
 }
 
+/** 金額區間只准在「〜／–」後面折行，不准把 2,500 折成 2,／500。不用 lookbehind：舊版 iOS Safari 會整包解析失敗。 */
+function breakAfterDash(label: string) {
+  const parts = label.split(/([〜–])/)
+  const out: (string | ReturnType<typeof Wbr>)[] = []
+  for (let i = 0; i < parts.length; i++) {
+    out.push(parts[i]!)
+    if (parts[i] === '〜' || parts[i] === '–') out.push(Wbr(i))
+  }
+  return out
+}
+function Wbr(key: number) { return <wbr key={`w${key}`} /> }
+
 function Intake({ card, level, choices, onChange, onBack, onSubmit, country = 'TW', budget = [], hideTop = false, onBudget }: {
   card: ModuleCard; level: Level; choices: Record<string, string | number>
   onChange: (k: string, v: string | number) => void; onBack: () => void; onSubmit: () => void
@@ -515,7 +532,7 @@ function Intake({ card, level, choices, onChange, onBack, onSubmit, country = 'T
                   <button
                     key={b.band} className="chip" data-band={b.band} aria-pressed={budget.includes(b.band)}
                     onClick={() => onBudget?.(b.band)}
-                  >{b.label}</button>
+                  >{breakAfterDash(b.label)}</button>
                 ))}
               </div>
             ) : f.type === 'stars' ? (

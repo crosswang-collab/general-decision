@@ -10,7 +10,14 @@ export function countryOf(loc: { lat: number; lng: number } | undefined): Countr
   if (!loc || !Number.isFinite(loc.lat) || !Number.isFinite(loc.lng)) return 'TW'
   const { lat, lng } = loc
   if (lat >= 21.5 && lat <= 26.5 && lng >= 118.0 && lng <= 122.5) return 'TW'
-  if (lat >= 24.0 && lat <= 45.6 && lng >= 122.9 && lng <= 146.0) return 'JP'
+  if (lat >= 24.0 && lat <= 45.6 && lng >= 122.9 && lng <= 146.0) {
+    // 方框會吃到韓國（首爾 126.98、釜山 129.08、濟州）與海參崴：挖掉。對馬（34.2,129.3）留給日本。
+    const tsushima = lat >= 34.0 && lat <= 34.75 && lng >= 129.1 && lng <= 129.55
+    const korea = lat >= 33.0 && lat <= 38.7 && lng >= 124.5 && lng <= 129.6 && !tsushima
+    const russia = lat >= 41.5 && lng < 139.2
+    if (korea || russia) return 'other'
+    return 'JP'
+  }
   return 'other'
 }
 

@@ -113,3 +113,35 @@ main[data-level="2"]{--officer-green:#005800;--officer-deep:#000000;--meme-edge:
 .sheet-opt:active{background:var(--khaki)}
 .sheet-cancel{width:100%;min-height:56px;margin-top:10px;font:inherit;font-size:1rem;font-weight:700;color:var(--ink);background:var(--paper);border:var(--card-edge) solid var(--line);border-radius:var(--radius);cursor:pointer}
 @media(prefers-reduced-motion:no-preference){.sheet{animation:sheet-up .2s ease-out}.sheet-scrim{animation:scrim-in .2s ease-out}@keyframes sheet-up{from{transform:translateY(100%)}to{transform:none}}@keyframes scrim-in{from{opacity:0}to{opacity:1}}}
+/* Round 3 設計修訂（Team Lead）：只用既有 token。
+   ① 預算一排放得下：「不限」窄欄 + 其餘等寬；字太長就在 〜／– 後自然折行，不讓最後一檔孤零零掉到第二排。 */
+.chips.bands{display:grid;grid-template-columns:minmax(52px,.7fr);grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px}
+.chips.bands .chip{padding:8px 3px;font-size:.8125rem;line-height:1.25;text-align:center;min-width:48px;overflow-wrap:normal}
+[data-screen="intake"] .lab{margin:18px 0 10px}
+/* ② 口令卡：店名在最上面，印章講選店理由（新據點／第 N 次／偵察任務）。 */
+.steps .place-head{display:flex;flex-direction:column;gap:2px;padding-bottom:12px;margin-bottom:10px;border-bottom:1px dashed var(--line)}
+.steps .place-head p{padding-left:0}
+.steps .place-head p:before{content:none}
+.steps p.place{font-size:1.125rem;font-weight:750;line-height:1.35}
+.steps p.place.plain{color:var(--ink)}
+.stamp{align-self:flex-start;display:inline-block;margin-bottom:6px;padding:3px 8px;font-size:.75rem;font-weight:800;letter-spacing:.08em;line-height:1.4;border:2px solid var(--olive);color:var(--ink);border-radius:var(--radius);transform:rotate(-2deg)}
+.stamp[data-mode="revisit"]{border-color:var(--line)}
+.stamp[data-mode="wildcard"],.stamp[data-mode="exhausted"]{border-color:var(--signal);color:var(--ink);background:var(--card)}
+.steps .attribution{padding-left:0;margin-top:10px}
+/* ③ 同意畫面：第一屏先講產品承諾，再講三件資料去向。 */
+.consent-hero{display:flex;gap:14px;align-items:center;padding:4px 0 14px;border-bottom:1px solid var(--line)}
+.consent-hero .av{width:88px;height:96px;flex:none;overflow:hidden;border-radius:var(--radius);background:var(--card);border:var(--card-edge) solid var(--line)}
+.consent-hero .av svg,.consent-hero .av img{width:100%;height:100%;object-fit:contain;display:block}
+.consent-hero h1{font-size:1.9rem;font-weight:900;letter-spacing:-.04em;line-height:1.1}
+.consent-hero p{margin-top:8px;font-size:.9375rem;font-weight:700;line-height:1.5}
+.consent-hero small{display:block;margin-top:4px;font-size:.8125rem;color:var(--mute);line-height:1.5}
+.consent-body{background:var(--card);border:var(--card-edge) solid var(--line);border-radius:var(--radius);box-shadow:var(--hard-shadow);padding:16px}
+.consent-lead{font-size:1.05rem;font-weight:800;letter-spacing:-.02em;line-height:1.45}
+.consent-list{list-style:none;counter-reset:c;margin:12px 0 10px;display:flex;flex-direction:column;gap:10px}
+.consent-list li{counter-increment:c;display:grid;grid-template-columns:24px minmax(0,1fr);column-gap:8px;font-size:.875rem;line-height:1.55}
+.consent-list li:before{content:counter(c);grid-row:1/3;width:22px;height:22px;display:grid;place-items:center;font-size:.75rem;font-weight:800;color:var(--on-action);background:var(--action);border-radius:var(--radius)}
+.consent-list b{font-weight:800}
+.consent-list span{color:var(--ink)}
+.consent-body small{display:block;font-size:.75rem;color:var(--mute);line-height:1.55}
+.consent-foot{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center}
+.linkish{font:inherit;color:var(--mute);background:none;border:0;padding:8px 0;min-height:36px;text-decoration:underline;text-underline-offset:3px;cursor:pointer}

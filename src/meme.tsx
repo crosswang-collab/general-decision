@@ -54,6 +54,19 @@ export interface PlaceMetaInput {
   openUntil?: string
   opensAt?: string
   priceText?: string
+  /** Round 3：伺服器算的選店理由，畫成印章（B1：讓發掘被看見）。 */
+  mode?: 'new' | 'revisit' | 'wildcard'
+  visits?: number
+  exhausted?: boolean
+}
+
+/** 印章文字：新店說「新據點」、回訪數「第 N 次」、偵察抽到的說「偵察」。附近都去過就說「已全數占領」。 */
+export function modeStamp(p: Pick<PlaceMetaInput, 'mode' | 'visits' | 'exhausted'>): string | undefined {
+  if (p.exhausted) return '這區已全數占領'
+  if (p.mode === 'new') return '新據點'
+  if (p.mode === 'wildcard') return '偵察任務'
+  if (p.mode === 'revisit') return typeof p.visits === 'number' && p.visits > 1 ? `第 ${p.visits} 次` : '回防'
+  return undefined
 }
 
 /**
@@ -77,21 +90,24 @@ export function formatPlaceMeta(p: PlaceMetaInput): string {
  * Round 3（T10、R3§3.3）：有店就在店名下一行補 place-meta，最後一行標「Google Maps」歸屬。
  */
 export function StepsCard({ steps, place }: { steps: string[]; place?: PlaceMetaInput }) {
+  const stamp = place ? modeStamp(place) : undefined
   return (
     <div className="steps" data-testid="steps">
-      {steps.map((s, i) => <p key={i}>{s}</p>)}
-      {place?.mapUrl && (
-        <p className="place">
-          <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
-          <span aria-hidden="true"> ↗</span>
-        </p>
-      )}
       {place && (
-        <>
+        // Team Lead 設計修訂：店家資訊放卡片最上面——「3 秒內知道往哪走」（T10），步驟是第二眼的事。
+        <div className="place-head">
+          {stamp && <span className="stamp" data-mode={place.exhausted ? 'exhausted' : place.mode} data-testid="mode-stamp">{stamp}</span>}
+          {place.mapUrl ? (
+            <p className="place">
+              <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
+              <span aria-hidden="true"> ↗</span>
+            </p>
+          ) : <p className="place plain">{place.name}</p>}
           <p className="place-meta" data-testid="place-meta">{formatPlaceMeta(place)}</p>
-          <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>
-        </>
+        </div>
       )}
+      {steps.map((s, i) => <p key={i}>{s}</p>)}
+      {place && <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>}
     </div>
   )
 }

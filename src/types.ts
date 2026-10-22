@@ -44,8 +44,6 @@ export interface PlaceMemSummary {
   sh: number[]
   /** 最近 ≤5 次回報完成的時間戳（ms），新的在前。 */
   dn: number[]
-  /** 累計完成次數（dn 只留最近 5 筆，數「第 N 次」要靠這個）。 */
-  dc?: number
   /** 不再出現直到（ms）；'forever' = 永久。 */
   x?: number | 'forever'
   fav?: boolean

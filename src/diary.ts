@@ -1,6 +1,6 @@
 // 新兵日記 — IndexedDB 讀寫、週統計（第 4、10 節）。
 import { del, get, set } from 'idb-keyval'
-import type { DiaryEntry, Level, ModuleId, WeeklyReport } from './types.ts'
+import type { DiaryEntry, Level, ModuleId, PickMode, ReissueReason, WeeklyReport } from './types.ts'
 
 const ENTRIES_KEY = 'decide.entries'
 const WEEKLY_KEY = 'decide.weekly'
@@ -14,13 +14,13 @@ export async function allEntries(): Promise<DiaryEntry[]> {
 }
 
 /**
- * 寫入一筆。同 id 視為同一道口令：覆寫 big/placeName/outcome（第 10 節換口令）。
- * 冪等：同 id 寫兩次只會有一筆。
+ * 寫入一筆。同 id 視為同一道口令：整筆覆寫（第 10 節換口令——換成第二家後 big／placeId／outcome 都跟著換，
+ * 不能留著上一家的 reason）。冪等：同 id 寫兩次只會有一筆。
  */
 export async function putEntry(entry: DiaryEntry): Promise<DiaryEntry[]> {
   const list = (await get<DiaryEntry[]>(ENTRIES_KEY)) ?? []
   const i = list.findIndex((e) => e.id === entry.id)
-  if (i >= 0) list[i] = { ...list[i]!, ...entry }
+  if (i >= 0) list[i] = entry
   else list.push(entry)
   await set(ENTRIES_KEY, list)
   return list
@@ -140,9 +140,18 @@ export function weeklyDue(now: Date = new Date()): boolean {
   return now.getDay() === 0 && now.getHours() >= 20
 }
 
+/**
+ * 組一筆日記。Round 3 起**不再寫入店名**（Google 條款，R3§3.3）：big 是口令主字，
+ * 之後要對回店靠 meta.placeId（PlaceMem 的鍵）。只放有值的鍵，免得 undefined 蓋掉東西。
+ */
 export function makeEntry(
   ts: string, module: ModuleId, level: Level, big: string,
-  outcome: DiaryEntry['outcome'], placeName?: string,
+  outcome: DiaryEntry['outcome'],
+  meta?: { placeId?: string; reason?: ReissueReason; mode?: PickMode },
 ): DiaryEntry {
-  return { id: entryId(ts, module), ts, module, level, big, placeName, outcome }
+  const e: DiaryEntry = { id: entryId(ts, module), ts, module, level, big, outcome }
+  if (meta?.placeId) e.placeId = meta.placeId
+  if (meta?.reason) e.reason = meta.reason
+  if (meta?.mode) e.mode = meta.mode
+  return e
 }

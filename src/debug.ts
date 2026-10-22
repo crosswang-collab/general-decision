@@ -53,6 +53,17 @@ export function formatCandidate(c: NonNullable<OrderDebug['places']>['candidates
   return bits.join(' ')
 }
 
+/** Round 3：發掘引擎的決定過程（不含 place_id）。除錯畫面與「複製」共用。 */
+export function formatPick(p: NonNullable<OrderDebug['pick']>): string {
+  const relaxed = p.relaxed.length ? ` 放寬=${p.relaxed.join('+')}` : ''
+  return `mode=${p.mode} lane=${p.lane} 池=${p.pool} 過濾後=${p.afterFilter}${relaxed}${p.exhausted ? ' 已全數占領' : ''}`
+}
+
+/** Round 3：候選中有價位資料的比例（R3§4.3 第一週遙測）。 */
+export function formatPrice(p: NonNullable<OrderDebug['price']>): string {
+  return `${p.country} 有價位 ${p.known}/${p.total}`
+}
+
 /** 全部轉成純文字，給「複製」用；貼進對話就等於把 log 帶出來。 */
 export function formatDebug(entries: DebugEntry[]): string {
   if (!entries.length) return '（沒有紀錄）'
@@ -64,6 +75,8 @@ export function formatDebug(entries: DebugEntry[]): string {
       for (const t of e.places.tries) lines.push(`  查詢 r=${t.r} ${t.raw < 0 ? '失敗' : `raw=${t.raw} 留=${t.kept}`}`)
       for (const c of e.places.candidates) lines.push(`  候選 ${formatCandidate(c)}`)
     }
+    if (e.pick) lines.push(`  選店 ${formatPick(e.pick)}`)
+    if (e.price) lines.push(`  價位 ${formatPrice(e.price)}`)
     if (e.retry) lines.push(`  重打 ${e.retry === 'nonanswer' ? '模型推掉不答' : '模型沒挑真店'}`)
     if (e.forced) lines.push(`  強制指定 ${e.forced}`)
     if (e.picked) lines.push(`  挑中 ${e.picked}`)

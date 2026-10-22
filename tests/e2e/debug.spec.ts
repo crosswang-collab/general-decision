@@ -1,7 +1,9 @@
 // 除錯畫面：長按班長名牌進來，顯示最近 10 次 /api/order 的真實經過。
 // 藏起來是刻意的（給查問題用，不是給使用者的功能），所以測試要證明「長按才開得了」。
 import { expect, test } from '@playwright/test'
-import { FIXED_ORDER } from './fixtures.ts'
+import { FIXED_ORDER, prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 const DEBUG = {
   module: 'sleep', level: 1, model: 'claude-haiku-4-5',

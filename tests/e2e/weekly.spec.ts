@@ -1,6 +1,8 @@
 // 第 12 節 S8：週報渲染。
 import { expect, test } from '@playwright/test'
-import { FIXED_ORDER, mockOrder } from './fixtures.ts'
+import { FIXED_ORDER, mockOrder, prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 const REPORT = {
   weekStart: '2026-09-07T00:00:00.000Z',

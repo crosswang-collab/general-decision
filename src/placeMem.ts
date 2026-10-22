@@ -1,0 +1,208 @@
+// 班長記得你 — 本機的「去過哪、不要哪」記憶（DEV-PLAN-3 W2、R3§2.3、R3§3.3）。
+//
+// 鐵則：只存 place_id、我方事件時間戳、我方品牌鍵／細類鍵。
+// **絕不**寫入店名、評分、價位、座標——Google 條款只准無限期保存 place_id（STRATEGY C1）。
+// 跟日記（decide.entries）分開存，避免互相覆寫（STRATEGY §2⑦）。
+//
+// 事件 → 記憶的規則表（每一列都有單元測試，T8）：
+//   shown          拿到口令的當下就記；不等使用者回報
+//   done           回報完成；該細類 a += 1
+//   closed         店關了：這家 24 小時內不再出現；不動細類
+//   not_this_kind  今天不想吃這類：細類 b += 0.5；不動店
+//   never_again    這家不要再來：90 天；第 2 次 → 永久
+//   fav            列入愛店 / 取消
+//   skip（沒做）   不呼叫任何一個——不服從是行為問題，不是店的問題
+import { del, get, set } from 'idb-keyval'
+import type { CuisineStats, PlaceMemEntry, PlaceMemSummary } from './types.ts'
+
+const MEM_KEY = 'decide.placeMem'
+const CUISINE_KEY = 'decide.cuisine'
+
+const DAY = 24 * 3600 * 1000
+/** 店關了：這家 24 小時內不再出現。 */
+export const CLOSED_MS = DAY
+/** 這家不要再來：90 天；第 2 次標記就永久。 */
+export const NEVER_AGAIN_MS = 90 * DAY
+/** 每家店本機留最近 10 次 shown／done；送伺服器時再各取 5。 */
+export const KEEP_EVENTS = 10
+export const SUMMARY_EVENTS = 5
+/** 本機最多留幾家（愛店與仍在封鎖期的店不會被清掉）。 */
+export const MAX_ENTRIES = 600
+
+type Store = Record<string, PlaceMemEntry>
+type MemModule = PlaceMemEntry['module']
+
+// ── 串行化：IndexedDB 的讀改寫不是原子的，連點兩下會互相蓋掉 ─────────
+let chain: Promise<unknown> = Promise.resolve()
+function serial<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(fn)
+  chain = run.catch(() => undefined) // 前一個失敗不能卡死後面的
+  return run
+}
+
+const readStore = async (): Promise<Store> => (await get<Store>(MEM_KEY)) ?? {}
+const readCuisine = async (): Promise<CuisineStats> => (await get<CuisineStats>(CUISINE_KEY)) ?? {}
+
+/** 這家店最近一次事件（shown／done）的時間；沒有事件 = 0。 */
+const lastEventAt = (e: PlaceMemEntry): number => Math.max(e.shown[0] ?? 0, e.done[0] ?? 0)
+
+/** 仍在封鎖期（永久，或截止時間在未來）。 */
+export function isBlocked(e: Pick<PlaceMemEntry, 'dislikeUntil'>, now: number): boolean {
+  return e.dislikeUntil === 'forever' || (typeof e.dislikeUntil === 'number' && e.dislikeUntil > now)
+}
+
+/** 超過上限時，清掉最舊且不受保護（愛店、封鎖中）的店。 */
+function prune(store: Store, now: number): void {
+  const ids = Object.keys(store)
+  if (ids.length <= MAX_ENTRIES) return
+  const removable = ids
+    .map((id) => store[id]!)
+    .filter((e) => !e.fav && !isBlocked(e, now))
+    .sort((a, b) => lastEventAt(a) - lastEventAt(b))
+  for (const e of removable.slice(0, ids.length - MAX_ENTRIES)) delete store[e.id]
+}
+
+function entryOf(store: Store, id: string, module: MemModule = 'eat'): PlaceMemEntry {
+  const cur = store[id]
+  if (cur) return cur
+  const fresh: PlaceMemEntry = { id, module, shown: [], done: [], dislikes: 0 }
+  store[id] = fresh
+  return fresh
+}
+
+const pushEvent = (list: number[], t: number): number[] => [t, ...list.filter((x) => x !== t)].slice(0, KEEP_EVENTS)
+
+async function mutate(now: number, fn: (store: Store) => void): Promise<void> {
+  await serial(async () => {
+    const store = await readStore()
+    fn(store)
+    prune(store, now)
+    await set(MEM_KEY, store)
+  })
+}
+
+async function mutateCuisine(fn: (c: CuisineStats) => void): Promise<void> {
+  await serial(async () => {
+    const c = await readCuisine()
+    fn(c)
+    await set(CUISINE_KEY, c)
+  })
+}
+
+// ── 事件 ────────────────────────────────────────────────────────────
+/** 拿到口令的當下就記（不等使用者回報）。同一毫秒重複呼叫不會記兩筆。 */
+export async function markShown(
+  id: string,
+  meta: { module: MemModule; brand?: string; cuisine?: string },
+  now: number,
+): Promise<void> {
+  await mutate(now, (store) => {
+    const e = entryOf(store, id, meta.module)
+    e.module = meta.module
+    e.shown = pushEvent(e.shown, now)
+    if (meta.brand) e.brand = meta.brand
+    if (meta.cuisine) e.cuisine = meta.cuisine
+  })
+}
+
+/** 回報完成＝去過。細類偏好 a += 1。 */
+export async function markDone(id: string, cuisine: string | undefined, now: number, module: MemModule = 'eat'): Promise<void> {
+  await mutate(now, (store) => {
+    const e = entryOf(store, id, module)
+    e.done = pushEvent(e.done, now)
+    if (cuisine) e.cuisine = cuisine
+  })
+  if (cuisine) await mutateCuisine((c) => { const [a, b] = c[cuisine] ?? [1, 1]; c[cuisine] = [a + 1, b] })
+}
+
+/** 店關了：24 小時內不再出現；**不動**細類偏好；不會把已經更長的封鎖縮短。 */
+export async function markClosed(id: string, now: number, module: MemModule = 'eat'): Promise<void> {
+  await mutate(now, (store) => {
+    const e = entryOf(store, id, module)
+    if (e.dislikeUntil === 'forever') return
+    e.dislikeUntil = Math.max(typeof e.dislikeUntil === 'number' ? e.dislikeUntil : 0, now + CLOSED_MS)
+  })
+}
+
+/** 今天不想吃這類：細類 b += 0.5；**不動**店。 */
+export async function markNotThisKind(cuisine: string | undefined): Promise<void> {
+  if (!cuisine) return
+  await mutateCuisine((c) => { const [a, b] = c[cuisine] ?? [1, 1]; c[cuisine] = [a, b + 0.5] })
+}
+
+/** 這家不要再來：90 天；第 2 次標記 → 'forever'。 */
+export async function markNeverAgain(id: string, now: number, module: MemModule = 'eat'): Promise<void> {
+  await mutate(now, (store) => {
+    const e = entryOf(store, id, module)
+    e.dislikes += 1
+    e.dislikeUntil = e.dislikes >= 2 ? 'forever' : Math.max(typeof e.dislikeUntil === 'number' ? e.dislikeUntil : 0, now + NEVER_AGAIN_MS)
+  })
+}
+
+/** 列入愛店／取消。 */
+export async function setFav(id: string, on: boolean, module: MemModule = 'eat'): Promise<void> {
+  await mutate(Date.now(), (store) => {
+    const e = entryOf(store, id, module)
+    if (on) e.fav = true
+    else delete e.fav
+  })
+}
+
+// ── 讀取 ────────────────────────────────────────────────────────────
+export async function getMem(id: string): Promise<PlaceMemEntry | undefined> {
+  return (await readStore())[id]
+}
+
+export async function allMem(): Promise<PlaceMemEntry[]> {
+  return Object.values(await readStore())
+}
+
+export async function cuisineStats(): Promise<CuisineStats> {
+  return readCuisine()
+}
+
+/**
+ * 送給伺服器的記憶摘要：只有 place_id、事件時間戳、品牌鍵、封鎖與愛店旗標。
+ * 沒有店名、評分、座標（R3§3.3）。依最近事件時間排序，最多 limit 筆。
+ * 只回該 module 的店；已過期的封鎖不送。
+ */
+export async function memSummary(module: MemModule, now: number, limit = 200): Promise<PlaceMemSummary[]> {
+  const list = (await allMem()).filter((e) => e.module === module)
+  const rows = list
+    .filter((e) => e.shown.length > 0 || e.done.length > 0 || isBlocked(e, now) || e.fav)
+    .sort((a, b) => lastEventAt(b) - lastEventAt(a))
+    .slice(0, limit)
+  return rows.map((e) => {
+    const s: PlaceMemSummary = { id: e.id, sh: e.shown.slice(0, SUMMARY_EVENTS), dn: e.done.slice(0, SUMMARY_EVENTS) }
+    if (isBlocked(e, now)) s.x = e.dislikeUntil as number | 'forever'
+    if (e.fav) s.fav = true
+    if (e.brand) s.b = e.brand
+    return s
+  })
+}
+
+/**
+ * 本週新占領／回防（B1）。
+ * 新占領 = 本週有 done，而且本週之前從沒 done 過的店；該店本週第一次 done 算新占領，
+ * 同店本週其餘的 done 與「本週前就去過的店」的 done 都算回防。
+ * weekStart 是 diary.weekStartOf 給的 ISO；只算 [weekStart, weekStart + 7 天) 且不晚於 now 的 done。
+ */
+export async function discoveryStats(weekStart: string, now: number = Date.now()): Promise<{ newPlaces: number; revisits: number }> {
+  const start = new Date(weekStart).getTime()
+  const end = Math.min(start + 7 * DAY, now + 1)
+  let newPlaces = 0
+  let revisits = 0
+  for (const e of await allMem()) {
+    const inWeek = e.done.filter((t) => t >= start && t < end).length
+    if (inWeek === 0) continue
+    const before = e.done.some((t) => t < start)
+    if (before) revisits += inWeek
+    else { newPlaces += 1; revisits += inWeek - 1 }
+  }
+  return { newPlaces, revisits }
+}
+
+/** 測試與「清除資料」用。 */
+export async function clearPlaceMem(): Promise<void> {
+  await serial(async () => { await del(MEM_KEY); await del(CUISINE_KEY) })
+}

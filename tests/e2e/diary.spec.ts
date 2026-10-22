@@ -1,6 +1,8 @@
 // 第 12 節 S7：走 3 道口令後日記出現 3 筆、統計正確。
 import { expect, test } from '@playwright/test'
-import { FIXED_ORDER, SECOND_ORDER, mockOrder } from './fixtures.ts'
+import { FIXED_ORDER, SECOND_ORDER, mockOrder, prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 test.use({ geolocation: { latitude: 25.033, longitude: 121.5654 }, permissions: ['geolocation'] })
 
@@ -44,6 +46,7 @@ test('換口令只留一筆日記（第 10 節）', async ({ page }) => {
   await page.locator('[data-card="eat"]').click()
   await page.getByRole('button', { name: '是！班長' }).click()
   await page.getByTestId('reissue').click()
+  await page.getByTestId('reason-closed').click()
   await expect(page.getByTestId('meme-big')).toHaveText('巷口牛肉麵')
   await page.getByRole('button', { name: '報告班長，完成' }).click()
   await page.getByRole('button', { name: '解散' }).click()

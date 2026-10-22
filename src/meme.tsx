@@ -46,13 +46,37 @@ export function MemeCard({
   )
 }
 
+/** 口令卡上的店家資訊列所需的欄位（Order['place'] 的子集）。 */
+export interface PlaceMetaInput {
+  name: string
+  mapUrl?: string
+  walkMin?: number
+  openUntil?: string
+  opensAt?: string
+  priceText?: string
+}
+
+/**
+ * T10：一行講完「幾分鐘走到、開到幾點、貴不貴」。每一項都來自 API 當次回傳值（T6），沒有的就不寫，不編。
+ * 價位沒資料一律寫「價位未知」，不用空白帶過。
+ */
+export function formatPlaceMeta(p: PlaceMetaInput): string {
+  const bits: string[] = []
+  if (typeof p.walkMin === 'number') bits.push(`步行 ${p.walkMin} 分`)
+  if (p.opensAt) bits.push(`${p.opensAt} 開`)
+  else if (p.openUntil) bits.push(`營業到 ${p.openUntil}`)
+  bits.push(p.priceText ?? '價位未知')
+  return bits.join(' · ')
+}
+
 /**
  * 步驟卡 — 第 9 節：梗圖卡下方白卡，▸ 前綴，無梗。
  * 階段 B：伺服器端比中真實店家時，店名本身就是 Google Maps 連結。
  * 掛在店名上、不另開一顆按鈕——多一顆按鈕就是第二個動作，跟「一個口令一個動作」衝突。
- * 沒有 mapUrl（Places 降級／比不中）就什麼都不畫，不會出現空連結。
+ * 沒有 mapUrl（Places 降級／比不中）就不畫連結，不會出現空連結。
+ * Round 3（T10、R3§3.3）：有店就在店名下一行補 place-meta，最後一行標「Google Maps」歸屬。
  */
-export function StepsCard({ steps, place }: { steps: string[]; place?: { name: string; mapUrl?: string } }) {
+export function StepsCard({ steps, place }: { steps: string[]; place?: PlaceMetaInput }) {
   return (
     <div className="steps" data-testid="steps">
       {steps.map((s, i) => <p key={i}>{s}</p>)}
@@ -61,6 +85,12 @@ export function StepsCard({ steps, place }: { steps: string[]; place?: { name: s
           <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
           <span aria-hidden="true"> ↗</span>
         </p>
+      )}
+      {place && (
+        <>
+          <p className="place-meta" data-testid="place-meta">{formatPlaceMeta(place)}</p>
+          <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>
+        </>
       )}
     </div>
   )

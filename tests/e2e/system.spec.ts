@@ -2,6 +2,9 @@
 // 注意：下面兩條硬編色斷言在 2026-09-16 的階段 3b 隨 NES 色盤一起更新過。
 // 那是 DEV-PLAN 明訂的唯一例外——改斷言是因為正確答案變了，不是為了讓測試變綠。
 import { expect, test } from '@playwright/test'
+import { prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 test('深色模式：背景換成深色 token', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' })

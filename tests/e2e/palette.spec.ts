@@ -3,9 +3,11 @@
 import { expect, test, type Page } from '@playwright/test'
 // @ts-expect-error design/ 是 .mjs，沒有型別宣告
 import { nesPalette } from '../../design/hwpalette.mjs'
-import { FIXED_ORDER, mockOrder, mockOrderFailure } from './fixtures.ts'
+import { FIXED_ORDER, mockOrder, mockOrderFailure, prime } from './fixtures.ts'
 
 const NES: string[] = (nesPalette() as string[]).map((h) => h.toUpperCase())
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 const WEEKLY = {
   weekStart: '2026-09-07T00:00:00.000Z',

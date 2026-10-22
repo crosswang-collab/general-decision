@@ -1,6 +1,7 @@
 // 第 13.3 節：產出 7 張截圖，供 checker 對照 decide-mock-v5.html。
 import { expect, test } from '@playwright/test'
 import { mkdirSync } from 'node:fs'
+import { prime } from '../e2e/fixtures.ts'
 
 const DIR = 'shots'
 const WEEKLY = {
@@ -27,6 +28,7 @@ const BUY = {
 test.use({ geolocation: { latitude: 25.033, longitude: 121.5654 }, permissions: ['geolocation'] })
 
 test.beforeAll(() => mkdirSync(DIR, { recursive: true }))
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 const shot = async (page: import('@playwright/test').Page, name: string) => {
   await page.waitForTimeout(250) // 等字體與 SVG 落定

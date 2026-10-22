@@ -75,3 +75,41 @@ main[data-level="2"]{--officer-green:#005800;--officer-deep:#000000;--meme-edge:
 .dbg ul{margin:4px 0 2px;padding-left:1.1em}
 .dbg li{color:var(--ink);margin:2px 0}
 [data-screen="debug"] .row{margin-top:0}
+
+/* Round 3：偵察方針、預算 chips、店家資訊列。只用既有 token，不新增色票。 */
+.topnav{align-items:center;justify-content:space-between}
+.topnav .nov{min-height:48px;padding:8px 16px 8px 0;font-weight:700}
+.topnav .nov:before{content:"方針 ";font-weight:400;color:var(--mute)}
+.topnav .nov:after{content:" ↻"}
+.linkbtn{align-self:flex-start;font:inherit;font-size:.75rem;color:var(--mute);background:none;border:0;min-height:44px;padding:8px 0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.chip{min-width:48px}
+.chips.bands .chip{padding:13px 11px;font-size:.875rem}
+.steps p.place-meta{color:var(--mute);font-size:.8125rem;line-height:1.5}
+.steps p.place-meta:before{content:none}
+.steps .attribution{display:block;margin-top:6px;padding-left:16px;font-size:.75rem;line-height:1.3;color:var(--mute)}
+.report{margin-top:-8px;text-align:right}
+.report a{display:inline-flex;align-items:center;min-height:36px;font-size:.6875rem;color:var(--mute);text-decoration:underline;text-underline-offset:3px}
+.stats.two{grid-template-columns:repeat(2,minmax(0,1fr));margin-top:-4px}
+.stats.two .stat:nth-child(2){background:var(--card);color:var(--ink);border-color:var(--line)}
+.stats.two .stat:nth-child(2) span{color:var(--mute)}
+/* 手動報座標：輸入框 16px 以上，iOS 才不會自動放大畫面。 */
+.manual{display:flex;flex-direction:column;gap:8px}
+.manual .lab{margin:0}
+.manual-in{display:flex;gap:8px;align-items:stretch}
+.manual-in input{flex:1;min-width:0;font:inherit;font-size:1rem;min-height:56px;padding:0 14px;color:var(--ink);background:var(--card);border:var(--card-edge) solid var(--line);border-radius:var(--radius)}
+.manual-in .btn{flex:0 0 auto;min-width:96px}
+.manual-err{font-size:.875rem;color:var(--ink);border-left:4px solid var(--signal);padding:4px 0 4px 10px}
+/* 底部選單：像 iOS action sheet，貼底、整排大按鍵、最下面一顆獨立的取消。 */
+.sheet-wrap{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.sheet-scrim{position:absolute;inset:0;background:#0000008C}
+.sheet{position:relative;width:100%;max-width:440px;background:var(--card);color:var(--ink);border:var(--card-edge) solid var(--line);border-bottom:0;border-radius:var(--radius) var(--radius) 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;outline:none}
+.sheet:before{content:"";align-self:center;width:36px;height:4px;background:var(--line);margin-bottom:12px}
+.sheet-head{display:flex;flex-direction:column;gap:2px;padding:0 4px 12px;text-align:center}
+.sheet-head b{font-size:.9375rem;font-weight:750}
+.sheet-head span{font-size:.75rem;color:var(--mute)}
+.sheet-opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:60px;padding:11px 12px;font:inherit;color:var(--ink);text-align:left;background:none;border:0;border-top:1px solid var(--line);cursor:pointer}
+.sheet-opt b{font-size:1.0625rem;font-weight:700}
+.sheet-opt span{font-size:.75rem;color:var(--mute)}
+.sheet-opt:active{background:var(--khaki)}
+.sheet-cancel{width:100%;min-height:56px;margin-top:10px;font:inherit;font-size:1rem;font-weight:700;color:var(--ink);background:var(--paper);border:var(--card-edge) solid var(--line);border-radius:var(--radius);cursor:pointer}
+@media(prefers-reduced-motion:no-preference){.sheet{animation:sheet-up .2s ease-out}.sheet-scrim{animation:scrim-in .2s ease-out}@keyframes sheet-up{from{transform:translateY(100%)}to{transform:none}}@keyframes scrim-in{from{opacity:0}to{opacity:1}}}

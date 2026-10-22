@@ -1,6 +1,6 @@
 // 階段 D：台灣情境用語守門 — 純函式，完全確定性，不打模型。
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CN_TO_TW, PLA_TO_ROC, localizeText, stripUrls } from '../../src/locale.ts'
+import { CN_TO_TW, JP_TRANSIT, PLA_TO_ROC, localizeFields, localizeText, rulesFor, stripUrls } from '../../src/locale.ts'
 import { enforceRules, localizeOrder, localizeWeeklyText } from '../../src/rules.ts'
 import type { Order } from '../../src/types.ts'
 
@@ -124,5 +124,49 @@ describe('週報路徑（D-3 ③：body 不經 enforceRules，另外接）', () 
     const r = localizeWeeklyText('本週口令 5 道，服從率 80%。只在不用出門的事上偷懶。下週晚上十點前熄燈。', '本週講評：合格。')
     expect(r.body).toBe('本週口令 5 道，服從率 80%。只在不用出門的事上偷懶。下週晚上十點前熄燈。')
     expect(r.verdict).toBe('本週講評：合格。')
+  })
+})
+
+// ── Round 3 B12／T9：在哪裡就照哪裡的規矩（以下為追加，上面既有斷言不動）──
+describe('B12：日本座標不產生「捷運」', () => {
+  it('JP：地鐵 → 地下鐵；捷運站 → 車站；捷運 → 電車；不套「地鐵→捷運」', () => {
+    expect(localizeText('搭地鐵去', 'JP').text).toBe('搭地下鐵去')
+    expect(localizeText('走到捷運站', 'JP').text).toBe('走到車站')
+    expect(localizeText('搭捷運過去', 'JP').text).toBe('搭電車過去')
+    expect(localizeText('地鐵、捷運站、捷運', 'JP').text).toBe('地下鐵、車站、電車')
+    expect(localizeText('搭地鐵、騎自行車', 'JP').text).not.toContain('捷運')
+  })
+  it('JP 仍套其他規則（出租車、盒飯、指導員）', () => {
+    expect(localizeText('坐出租車買盒飯', 'JP').text).toBe('坐計程車買便當')
+    expect(localizeText('去找指導員', 'JP').text).toBe('去找輔導長')
+  })
+  it('TW 與未帶國家：維持「地鐵 → 捷運」，也不會把捷運改成電車', () => {
+    expect(localizeText('搭地鐵去').text).toBe('搭捷運去')
+    expect(localizeText('搭地鐵去', 'TW').text).toBe('搭捷運去')
+    expect(localizeText('搭捷運去', 'TW').text).toBe('搭捷運去')
+    expect(localizeText('搭捷運去', 'TW').hits).toEqual([])
+    expect(localizeText('搭地鐵去', 'other').text).toBe('搭捷運去')
+  })
+  it('rulesFor：JP 不含「地鐵→捷運」；TW 不含任何 JP 交通規則', () => {
+    expect(rulesFor('JP').some((r) => r.from === '地鐵' && r.to === '捷運')).toBe(false)
+    expect(rulesFor('TW').some((r) => JP_TRANSIT.includes(r))).toBe(false)
+    expect(rulesFor().length).toBe(rulesFor('TW').length)
+  })
+  it('localizeFields 傳遞 country：meme／steps／log 在日本都不出現「捷運」，在台灣不出現「地下鐵」「電車」「¥」', () => {
+    const dirty = { top: '搭地鐵去', steps: ['走到捷運站。', '再搭捷運。'], log: '用戶搭地鐵。' }
+    const jp = localizeFields(dirty, ['top', 'steps', 'log'], 'JP')
+    expect(jp.value.top).toBe('搭地下鐵去')
+    expect(jp.value.steps).toEqual(['走到車站。', '再搭電車。'])
+    expect(jp.value.log).toBe('使用者搭地下鐵。')
+    expect(JSON.stringify(jp.value)).not.toContain('捷運')
+    const tw = localizeFields(dirty, ['top', 'steps', 'log'], 'TW')
+    expect(tw.value.top).toBe('搭捷運去')
+    expect(tw.value.steps).toEqual(['走到捷運站。', '再搭捷運。'])
+    expect(JSON.stringify(tw.value)).not.toMatch(/地下鐵|電車|¥/)
+  })
+  it('localizeFields 沒命中 → 同一個 reference（country 不影響零成本判斷）', () => {
+    const clean2 = { top: '去吃熱的', steps: ['步行 6 分鐘。'] }
+    expect(localizeFields(clean2, ['top', 'steps'], 'JP').value).toBe(clean2)
+    expect(localizeFields(clean2, ['top', 'steps'], 'JP').hits).toEqual([])
   })
 })

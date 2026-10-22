@@ -98,8 +98,10 @@ export const PARAMS = {
   minCount: 5, // 評論數保底
   minPool: 5, // 硬過濾剩幾家以下就放寬
   sigma: 1.0, // Thompson：評論少 → 變異大
-  halfShownDays: 10, // 曝光半衰期（被出成口令）
-  halfDoneDays: 21, // 曝光半衰期（去過）
+  // 半衰期（Team Lead 裁定 2026-10-22，重播校正）：10/21 天會把 7 天重複率壓到 1%、代價是平均評分多掉 0.05；
+  // 3/7 天讓 7 天重複率約 7%（門檻 15%），好店回來得比較快。
+  halfShownDays: 3, // 曝光半衰期（被出成口令）
+  halfDoneDays: 7, // 曝光半衰期（去過）
   T: 0.25, // 溫度（R3 範圍 0.25–0.5）。重播調參：取下限，品質權重最大（bayesDrop 仍未達標，見 tests/unit/discovery-replay.test.ts）
   chain: 0.6,
   walkD: 25,
@@ -108,7 +110,7 @@ export const PARAMS = {
   cooldown: 3, // 最近幾次出過的店不再出
   reconMin: 3, // 全面偵察：沒見過的非連鎖店少於這個數 → exhausted
   // familiar 計劃起始 0.6，重播回訪率只有 0.12（門檻 0.35–0.65）；0.05 → 0.40。熟門熟路本來就該幾乎不怕回訪，冷卻 3 次照樣擋連續同一家。
-  lambda: { familiar: 0.05, balanced: 1.2, recon: 1.2 } as Record<Novelty, number>,
+  lambda: { familiar: 0.05, balanced: 0.8, recon: 1.2 } as Record<Novelty, number>,
   wildcard: { familiar: 0, balanced: 0.2, recon: 1 } as Record<Novelty, number>,
 }
 

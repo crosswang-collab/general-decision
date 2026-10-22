@@ -119,6 +119,7 @@ export function metrics(novelty: Novelty) {
   let revisits = 0
   const distinct: number[] = []
   const drops: number[] = []
+  const gaps: number[] = []
   const poolChain: number[] = []
   for (let seed = 1; seed <= SEEDS; seed++) {
     const { picks, pool, dislikedHit: dh } = simulate(seed, novelty)
@@ -143,6 +144,10 @@ export function metrics(novelty: Novelty) {
     for (let i = 0; i + 12 <= picks.length; i++) minDistinct = Math.min(minDistinct, new Set(picks.slice(i, i + 12).map((p) => p.id)).size)
     distinct.push(minDistinct)
     drops.push(top8avg - mean(picks.map((p) => bayes(byId.get(p.id)!))))
+    // oracleGap：同樣去了 K 家不同的店，「最好的 K 家合格店」平均貝氏 − 實際那 K 家平均。量的是挑店效率，不受「越新鮮必然越往下挖」影響。
+    const ids = [...new Set(picks.map((p) => p.id))]
+    const eligible = ranked.filter((c) => bayes(c) >= 3.7 && (c.ratingCount ?? 0) >= 5).map(bayes)
+    gaps.push(mean(eligible.slice(0, ids.length)) - mean(ids.map((id) => bayes(byId.get(id)!))))
   }
   // 預算：budget [1] 另跑一輪
   let bTotal = 0
@@ -162,6 +167,7 @@ export function metrics(novelty: Novelty) {
     distinct12: median(distinct),
     top3Share: r3(top3 / total),
     bayesDrop: r3(mean(drops)),
+    oracleGap: r3(mean(gaps)),
     chainShare: r3(chainPicks / total / mean(poolChain)),
     reconChainWhenFresh,
     belowFloor: below,

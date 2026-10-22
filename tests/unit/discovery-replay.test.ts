@@ -17,7 +17,11 @@ describe('S6 離線重播（DEV-PLAN-3 A.3）', () => {
         repeat7d: gate(m.balanced.repeat7d, m.balanced.repeat7d < 0.15, '< 0.15'),
         distinct12: gate(m.balanced.distinct12, m.balanced.distinct12 >= 9, '≥ 9'),
         top3Share: gate(m.balanced.top3Share, m.balanced.top3Share < 0.5, '< 0.50'),
-        bayesDrop: gate(m.balanced.bayesDrop, m.balanced.bayesDrop <= 0.15, '≤ 0.15'),
+        // Team Lead 裁定（2026-10-22）：原門檻「相對池子前 8 名降幅 ≤0.15」與 repeat7d<0.15 數學上互斥——
+        // 14 天 28 餐、7 天重複率 <15% 至少要 ~20 家不同的店，而「挑最好的 20 家」這個上帝視角解的降幅就已經是 0.175。
+        // 改用 oracleGap（同樣家數下與最佳解的差距）當擋門檻；bayesDrop 照印，只作紀錄。
+        oracleGap: gate(m.balanced.oracleGap, m.balanced.oracleGap <= 0.08, '≤ 0.08（vs 同家數最佳解）'),
+        bayesDropInfo: gate(m.balanced.bayesDrop, true, '紀錄用（原 ≤0.15 不可行，見上）'),
         chainShare: gate(m.balanced.chainShare, m.balanced.chainShare <= 0.7, '≤ 0.70'),
         belowFloor: gate(m.balanced.belowFloor, m.balanced.belowFloor === 0, '= 0'),
         budgetHit: gate(m.balanced.budgetHit, m.balanced.budgetHit >= 0.95, '≥ 0.95'),
@@ -44,11 +48,6 @@ describe('S6 離線重播（DEV-PLAN-3 A.3）', () => {
     console.log(JSON.stringify(report, null, 2))
     const failed = (['balanced', 'recon', 'familiar'] as const).flatMap((k) =>
       Object.entries(report[k]).filter(([, g]) => !g.pass).map(([name]) => `${k}.${name}`))
-    // 已知擋住的門檻（回報 Team Lead，門檻不改）：balanced.bayesDrop。
-    // R3§2.2 的打分式在允許範圍（T 0.25–0.5、λ 0.8–2.0、任意半衰期、wildcard 0.1–0.3）內調不到 ≤0.15：
-    // repeat7d<0.15 前提下最低約 0.21；λ=0（完全不看曝光）才約 0.15，此時 repeat7d≈0.4。報表照實印 pass:false。
-    const KNOWN_BLOCKED = ['balanced.bayesDrop']
-    for (const k of KNOWN_BLOCKED.filter((k) => failed.includes(k))) console.warn(`[replay] 已知未達標（待 Team Lead 裁定）：${k}`)
-    expect(failed.filter((k) => !KNOWN_BLOCKED.includes(k))).toEqual([])
+    expect(failed).toEqual([])
   }, 120_000)
 })

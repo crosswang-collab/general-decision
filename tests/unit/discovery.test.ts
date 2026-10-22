@@ -1,7 +1,7 @@
 // @vitest-environment node
 // 發掘引擎 pickPlace（DEV-PLAN-3 W1.3）：B2、B3、B4、同品牌合併、mode／visits、三方針 wildcard、relaxed、種子可重現。
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { bayes, betaSample, cuisineOf, exposure, mulberry32, pickPlace, type PickCtx } from '../../src/discovery.ts'
+import { bayes, betaSample, cuisineOf, exposure, mulberry32, PARAMS, pickPlace, type PickCtx } from '../../src/discovery.ts'
 import { bandOf } from '../../src/price.ts'
 import { clusterKeys } from '../../src/chains.ts'
 import type { Band, Novelty, PlaceCandidate, PlaceMemSummary } from '../../src/types.ts'
@@ -40,11 +40,11 @@ describe('工具函式', () => {
     expect(m).toBeGreaterThan(0.77)
     expect(m).toBeLessThan(0.83)
   })
-  it('exposure：shown 半衰期 10 天、done 21 天；沒記憶 = 0', () => {
+  it('exposure：過一個半衰期剩一半（shown／done 半衰期取 PARAMS，Team Lead 重播校正為 3／7 天）；沒記憶 = 0', () => {
     expect(exposure(undefined, NOW)).toBe(0)
     expect(exposure({ sh: [NOW], dn: [] }, NOW)).toBeCloseTo(1)
-    expect(exposure({ sh: [NOW - 10 * DAY], dn: [] }, NOW)).toBeCloseTo(0.5)
-    expect(exposure({ sh: [], dn: [NOW - 21 * DAY] }, NOW)).toBeCloseTo(0.5)
+    expect(exposure({ sh: [NOW - PARAMS.halfShownDays * DAY], dn: [] }, NOW)).toBeCloseTo(0.5)
+    expect(exposure({ sh: [], dn: [NOW - PARAMS.halfDoneDays * DAY] }, NOW)).toBeCloseTo(0.5)
   })
   it('cuisineOf：primaryType 優先，types 補，對不到 other', () => {
     expect(cuisineOf('ramen_restaurant')).toBe('ramen')

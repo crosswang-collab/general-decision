@@ -58,10 +58,12 @@ for (const level of [0, 2]) {
   })
 }
 
-test('回報這道口令是 mailto 小連結，不是第二個動作鍵', async ({ page }) => {
+test('回報這道口令是小連結（信箱未填 → GitHub issue），不是第二個動作鍵', async ({ page }) => {
   await mockOrder(page, [withPlace({})])
   await toCmd(page)
   const a = page.getByTestId('report-link')
   await expect(a).toHaveText('回報這道口令')
-  expect(await a.getAttribute('href')).toMatch(/^mailto:/)
+  const href = (await a.getAttribute('href'))!
+  expect(href.startsWith('https://github.com/crosswang-collab/general-decision/issues/new?title=')).toBe(true)
+  expect(href).not.toContain('ChIJ') // 不含店家代碼
 })

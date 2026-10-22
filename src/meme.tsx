@@ -86,28 +86,29 @@ export function formatPlaceMeta(p: PlaceMetaInput): string {
  * 步驟卡 — 第 9 節：梗圖卡下方白卡，▸ 前綴，無梗。
  * 階段 B：伺服器端比中真實店家時，店名本身就是 Google Maps 連結。
  * 掛在店名上、不另開一顆按鈕——多一顆按鈕就是第二個動作，跟「一個口令一個動作」衝突。
- * 沒有 mapUrl（Places 降級／比不中）就不畫連結，不會出現空連結。
+ * 沒有 mapUrl（Places 降級／比不中）就整個店家區（印章、店名、meta、歸屬）都不畫：
+ * 不會出現空連結，也不會把模型編的店名顯示出來（R2-01）。
  * Round 3（T10、R3§3.3）：有店就在店名下一行補 place-meta，最後一行標「Google Maps」歸屬。
  */
 export function StepsCard({ steps, place }: { steps: string[]; place?: PlaceMetaInput }) {
-  const stamp = place ? modeStamp(place) : undefined
+  // R2-01：只有伺服器真的比中店（有 mapUrl）才畫店家區。沒有 mapUrl 的 place 可能是模型編的，不准流到畫面。
+  const real = place?.mapUrl ? place : undefined
+  const stamp = real ? modeStamp(real) : undefined
   return (
     <div className="steps" data-testid="steps">
-      {place && (
+      {real && (
         // Team Lead 設計修訂：店家資訊放卡片最上面——「3 秒內知道往哪走」（T10），步驟是第二眼的事。
         <div className="place-head">
-          {stamp && <span className="stamp" data-mode={place.exhausted ? 'exhausted' : place.mode} data-testid="mode-stamp">{stamp}</span>}
-          {place.mapUrl ? (
-            <p className="place">
-              <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
-              <span aria-hidden="true"> ↗</span>
-            </p>
-          ) : <p className="place plain">{place.name}</p>}
-          <p className="place-meta" data-testid="place-meta">{formatPlaceMeta(place)}</p>
+          {stamp && <span className="stamp" data-mode={real.exhausted ? 'exhausted' : real.mode} data-testid="mode-stamp">{stamp}</span>}
+          <p className="place">
+            <a href={real.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{real.name}</a>
+            <span aria-hidden="true"> ↗</span>
+          </p>
+          <p className="place-meta" data-testid="place-meta">{formatPlaceMeta(real)}</p>
         </div>
       )}
       {steps.map((s, i) => <p key={i}>{s}</p>)}
-      {place && <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>}
+      {real && <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>}
     </div>
   )
 }

@@ -44,6 +44,8 @@ export interface PlaceMemSummary {
   sh: number[]
   /** 最近 ≤5 次回報完成的時間戳（ms），新的在前。 */
   dn: number[]
+  /** 累計完成次數（dn 只留最近 5 筆，數「第 N 次」要靠這個）。 */
+  dc?: number
   /** 不再出現直到（ms）；'forever' = 永久。 */
   x?: number | 'forever'
   fav?: boolean
@@ -57,6 +59,7 @@ export interface PlaceMemEntry {
   module: 'eat' | 'rest'
   shown: number[] // ≤ 10，新的在前
   done: number[] // ≤ 10，新的在前
+  doneCount?: number // 累計完成次數（done 只留 10 筆）；舊資料沒有這欄就用 done.length
   dislikeUntil?: number | 'forever'
   dislikes: number // never_again 次數；第 2 次 → forever
   fav?: boolean

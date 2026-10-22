@@ -100,8 +100,8 @@ main[data-level="2"]{--officer-green:#005800;--officer-deep:#000000;--meme-edge:
 .manual-in .btn{flex:0 0 auto;min-width:96px}
 .manual-err{font-size:.875rem;color:var(--ink);border-left:4px solid var(--signal);padding:4px 0 4px 10px}
 /* 底部選單：像 iOS action sheet，貼底、整排大按鍵、最下面一顆獨立的取消。 */
-.sheet-wrap{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
-.sheet-scrim{position:absolute;inset:0;background:#0000008C}
+.sheet-wrap{position:fixed;top:0;right:0;bottom:0;left:0;z-index:50;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.sheet-scrim{position:absolute;top:0;right:0;bottom:0;left:0;background:#0000008C}
 .sheet{position:relative;width:100%;max-width:440px;background:var(--card);color:var(--ink);border:var(--card-edge) solid var(--line);border-bottom:0;border-radius:var(--radius) var(--radius) 0 0;padding:14px 16px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;outline:none}
 .sheet:before{content:"";align-self:center;width:36px;height:4px;background:var(--line);margin-bottom:12px}
 .sheet-head{display:flex;flex-direction:column;gap:2px;padding:0 4px 12px;text-align:center}

@@ -17,7 +17,7 @@ export const FIXED_ORDER = {
   steps: ['步行 6 分鐘，營業到 21:00。', '魯肉飯、滷蛋、燙青菜。', '12 分鐘吃完，手機收起來。'],
   // Round 3：伺服器會帶 mode／visits／band／priceText／country／cuisine。
   place: {
-    id: 'p1', name: '阿財魯肉飯', walkMin: 6, openUntil: '21:00',
+    id: 'p1', name: '阿財魯肉飯', mapUrl: 'https://www.google.com/maps/search/?api=1&query=x&query_place_id=p1', walkMin: 6, openUntil: '21:00',
     mode: 'new', visits: 1, band: 2, priceText: '≈NT$150–400', country: 'TW', cuisine: 'tw',
   },
   log: '12:41 魯肉飯，12:58 完成。',
@@ -26,7 +26,7 @@ export const FIXED_ORDER = {
 export const SECOND_ORDER = {
   ...FIXED_ORDER,
   meme: { top: '換一家，照樣是口令', big: '巷口牛肉麵', bot: '第二道口令一樣算' },
-  place: { id: 'p2', name: '巷口牛肉麵', walkMin: 3, mode: 'new', visits: 1, band: null, country: 'TW', cuisine: 'noodle' },
+  place: { id: 'p2', name: '巷口牛肉麵', mapUrl: 'https://www.google.com/maps/search/?api=1&query=x&query_place_id=p2', walkMin: 3, mode: 'new', visits: 1, band: null, country: 'TW', cuisine: 'noodle' },
   steps: ['步行 3 分鐘，營業中。', '清燉，不加辣。'],
   log: '13:05 牛肉麵，13:22 完成。',
 }

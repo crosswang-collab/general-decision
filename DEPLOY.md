@@ -1,5 +1,9 @@
 # 上線五步（第 15 節）
 
+> **2026-10-26 更新：五步都完成了。** 金鑰已生效，正式站 `/api/order` 實測回真店口令（Round 3 已上線）。
+> Round 3 新增的選配環境變數：`TYPESAFE_API_KEY`（填了才會啟用 Jev 判斷與品味判準腳本，不填一切照常）。
+> 部署方式不變：PR 合併進 main → Vercel 自動部署 Production。Preview 部署有 Vercel 登入保護，外部 curl 打不到。
+
 S1–S10 已經完成並且全綠。
 
 **第 1 步（匯入）與第 4 步（Deploy）已經做完了** —— Vercel 專案已存在並與 GitHub 連動，

@@ -1,7 +1,7 @@
 {
   "loop_name": "decide-mvp-build",
   "contract_ref": "GOAL: PWA 上線且 7 卡可走完; STOP: A∧B∧C∧D∧E; BUDGET: 5 輪/90 分",
-  "status": "blocked",
+  "status": "done",
   "run_id": "run-20260911-230006",
   "budget": {
     "rounds_used": 2,
@@ -70,5 +70,7 @@
       "E": "BLOCKED（範圍已縮小）— 正式站已部署且 /api/* 可回應；剩環境變數與 Places API 啟用"
     }
   },
-  "last_updated": "2026-09-16T02:51:54.000Z"
+  "last_updated": "2026-10-26T16:10:00.000Z",
+  "superseded_by": "state/ROUND3-PROGRESS.md",
+  "pending_resolved_note": "2026-10-26：ANTHROPIC_API_KEY、GOOGLE_PLACES_KEY 已在 Vercel 生效，正式站實測 /api/order 回真店口令。"
 }

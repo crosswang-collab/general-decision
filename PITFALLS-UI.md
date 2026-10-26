@@ -19,3 +19,16 @@
   **同一天踩第二次**（lv2 名牌的 `--brass`）：淺色宣告寫在元件樣式旁（第 22 行），深色覆寫放在第 12 行的 media block，又被蓋掉。
   規則：每一層的 token（淺色與深色）一律集中在 `main[data-level]` 那一區，淺色在前、深色 media block 緊接在後，不要散到各元件旁邊。
 
+
+# Round 3 教訓（2026-10-22 ～ 10-26）
+
+- [Places·推薦] 同一座標永遠同一家 — Nearby 不帶 rankPreference 預設熱門排序、本地再依評分固定排序、prompt 叫模型挑最高分、保底也是第一名：整條鏈確定性且無記憶。選店改由程式加權抽樣＋本機記憶（`src/discovery.ts`、`src/placeMem.ts`），模型只寫口令。
+- [Places·深夜] 熱門排序撈回的 20 家深夜幾乎全打烊 → no_places — 第二次查詢改 Text Search＋`openNow:true`、依距離（`src/lanes.ts` widenPlan）。Nearby 沒有 openNow 參數。
+- [Places·住宿] includedTypes `restaurant` 會撈回主類別是 hotel／lodging 的地點（「東京半島酒店」）— `toCandidates` 依 primaryType 拿掉住宿類。
+- [Places·日本] languageCode `zh-TW` 查日本店，沒中文名就回英文拼音、跟招牌對不上 — 日本座標用 `ja`（`placesLanguage`）。
+- [時區] 伺服器跑 UTC：`Date#getDay()/getHours()` 會拿到錯的星期與小時 — 一律用 `src/tz.ts`（Intl＋座標判時區）。
+- [前端相容] regex lookbehind `(?<=…)` 舊 iOS Safari 會讓整包 JS 解析失敗；CSS `inset` iOS < 14.5 不支援 — 前端不用 lookbehind（伺服器端可以），`inset` 寫四邊。
+- [文字守門] 金額 regex 把量詞「塊」當錢、次數修正把「不要讓我說第二次」改壞、營業時間把「12:10 開動」當開門 — 守門規則一律白名單語境＋回歸測試，只改 meme 上下行、不動 steps。
+- [IndexedDB] iOS 的 IDB 偶爾卡住不回，`await` 它會讓主流程永遠停在等待 — 本機記憶呼叫一律包 800ms 逾時（`safe()`），寫入不阻擋換畫面。
+- [驗收門檻] 「平均評分降幅 ≤0.15」與「7 天重複率 <15%」數學上互斥 — 門檻要先用上帝視角算可行性；改量「同家數下與最佳解的差距」（oracleGap）。
+- [流程] 平行子代理用 git worktree 各自一個分支，避免共用工作目錄互踩；合併前型別契約先由 Team Lead commit。

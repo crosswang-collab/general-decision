@@ -8,9 +8,9 @@
 
 ## 現在的狀態
 
-S1–S10 完成。已部署到 Vercel，`/api/order`、`/api/weekly` 在正式站可回應。
-**剩最後兩件事需要你本人**：在 Vercel 填 `ANTHROPIC_API_KEY`（必要）、在 GCP 啟用 Places API (New)（可選）。
-見 [DEPLOY.md](DEPLOY.md)。進度在 [state/decide-mvp-build.md](state/decide-mvp-build.md)。
+**2026-10-26：Round 3 已上線**（main `11603c6` 之後），正式站 https://general-decision.vercel.app 。
+金鑰（`ANTHROPIC_API_KEY`、`GOOGLE_PLACES_KEY`）已在 Vercel 生效。接手先讀 [state/ROUND3-PROGRESS.md](state/ROUND3-PROGRESS.md)：
+已完成什麼、卡在 Cross 的事、已知風險、下一輪候選。部署細節見 [DEPLOY.md](DEPLOY.md)。
 
 ## Round 3（2026-10-22）：不再重複推薦、加上價位
 

@@ -170,7 +170,7 @@ async function handler(request: Request): Promise<Response> {
       hows.push(how)
       placesCalled++
       try {
-        const raw = await fetchPlaces(req.loc, plan)
+        const raw = await fetchPlaces(req.loc, plan, placesLanguage(countryOf(req.loc)))
         const got = toCandidates(raw, req.loc, now, req.exclude ?? [], tz).map((c) => ({ ...c, lane: plan!.lane }))
         cands = mergeCandidates(cands, got)
         tries.push({ r: plan.radius, raw: raw.length, kept: got.length })
@@ -363,10 +363,19 @@ async function callClaude(system: string, user: string, maxTokens: number): Prom
 /**
  * 第 8 節：一個 LanePlan 打一次 Places。Round 3 起**不在這裡重試**：第二次呼叫就是重試（總共 ≤ 2 次，DEV-PLAN-3 W1.7）。
  * Nearby 照 lane 的 type 查；Text Search 用中文關鍵字（居酒屋、熱炒沒有 type），locationBias 圓。
- * 兩者同一組 fieldMask、同一個 SKU。languageCode 固定 zh-TW，店名才會是台灣寫法（第 7 節規則 8）；
+ * 兩者同一組 fieldMask、同一個 SKU。languageCode 台灣用 zh-TW、日本用 ja（placesLanguage）；
  * 日本的店名要不要改 ja 待實測（H6），先記在 debug 的 country。
  */
-async function fetchPlaces(loc: { lat: number; lng: number }, plan: LanePlan): Promise<RawPlace[]> {
+/**
+ * 店名語言（STRATEGY H6，2026-10-26 正式站實測證實）：在日本用 zh-TW 查，Google 沒有中文名就回英文拼音
+ * （「Toriichizu Yurakucho」），跟招牌「鳥一途」對不上，人站在店門口找不到。日本座標改用 ja，招牌寫什麼就叫什麼；
+ * 班長台詞仍是台灣繁中（prompt 與 localizeOrder 不變）。
+ */
+export function placesLanguage(country: Country): string {
+  return country === 'JP' ? 'ja' : 'zh-TW'
+}
+
+async function fetchPlaces(loc: { lat: number; lng: number }, plan: LanePlan, languageCode = 'zh-TW'): Promise<RawPlace[]> {
   const key = process.env.GOOGLE_PLACES_KEY
   if (!key) throw new Error('GOOGLE_PLACES_KEY 未設定')
 
@@ -374,8 +383,8 @@ async function fetchPlaces(loc: { lat: number; lng: number }, plan: LanePlan): P
   // 第一次不用 openNow：「60 分內開門」的店也要留（篩選在 toCandidates）；第二次（widenPlan）才要求營業中。
   const body = JSON.stringify(
     plan.kind === 'text'
-      ? { textQuery: plan.textQuery, pageSize: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationBias: { circle }, ...(plan.openNow ? { openNow: true } : {}) }
-      : { includedTypes: plan.includedTypes, maxResultCount: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationRestriction: { circle } },
+      ? { textQuery: plan.textQuery, pageSize: FETCH_COUNT, rankPreference: plan.rank, languageCode, locationBias: { circle }, ...(plan.openNow ? { openNow: true } : {}) }
+      : { includedTypes: plan.includedTypes, maxResultCount: FETCH_COUNT, rankPreference: plan.rank, languageCode, locationRestriction: { circle } },
   )
   let res: Response
   try {

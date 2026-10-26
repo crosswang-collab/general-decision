@@ -567,3 +567,19 @@ describe('R3R-2：伺服器截 mem 時封鎖與愛店優先', () => {
     expect(ids).toContain('lover')
   })
 })
+
+describe('店名語言：日本用 ja，台灣用 zh-TW（H6 正式站實測）', () => {
+  it('東京座標的 Places 請求帶 languageCode ja；台北帶 zh-TW', async () => {
+    for (const [loc, want] of [[{ lat: 35.6812, lng: 139.7671 }, 'ja'], [{ lat: 25.033, lng: 121.5654 }, 'zh-TW']] as const) {
+      const bodies: string[] = []
+      vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).includes('anthropic')) return claudeOk(ORDER_JSON)
+        bodies.push(String(init?.body))
+        return new Response(JSON.stringify({ places: [] }), { status: 200 })
+      }))
+      await handler(post({ loc }))
+      expect(bodies.length).toBeGreaterThan(0)
+      for (const b of bodies) expect(JSON.parse(b).languageCode).toBe(want)
+    }
+  })
+})

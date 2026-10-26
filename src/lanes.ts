@@ -79,7 +79,7 @@ export type NearbyRank = 'POPULARITY' | 'DISTANCE'
 export type TextRank = 'DISTANCE' | 'RELEVANCE'
 export type LanePlan =
   | { kind: 'nearby'; lane: string; includedTypes: string[]; radius: number; rank: NearbyRank }
-  | { kind: 'text'; lane: string; textQuery: string; radius: number; rank: TextRank }
+  | { kind: 'text'; lane: string; textQuery: string; radius: number; rank: TextRank; openNow?: boolean }
 
 /** eat 卡（非甜食、非素）可輪替的 lane。 */
 export function mealLanes(choices: Record<string, string | number>, country: Country, hour?: number): Lane[] {
@@ -151,18 +151,25 @@ export function pickLane(
 /**
  * 第二次呼叫（有效候選 < 5，或第一次失敗）：半徑 ×2.5、換另一種 rankPreference。
  * - Text Search：同一個關鍵字。
- * - Nearby：退回 `restaurant`；甜食／素食保留自己的 type（不然會派甜食的人去吃牛排）。
- * - forceRestaurant：第一次回 400（lane 的 type 不被接受）→ 一律退回 restaurant。
+ * - Nearby 一般 lane：改 Text Search「餐廳／レストラン／restaurant」＋ openNow、依距離（深夜也查得到營業中的店）。
+ *   甜食／素食保留自己的 type（不然會派甜食的人去吃牛排）。
+ * - forceRestaurant：第一次回 400（lane 的 type 不被接受）→ 一律退回營業中的餐廳 Text Search。
  */
-export function widenPlan(first: LanePlan, opts: { forceRestaurant?: boolean } = {}): LanePlan {
+export function widenPlan(first: LanePlan, opts: { forceRestaurant?: boolean; country?: Country } = {}): LanePlan {
   const radius = Math.round(first.radius * WIDEN_FACTOR)
+  // 正式站實測（2026-10-26 深夜，東京站／台北市府）：Nearby 照熱門排序撈回的 20 家幾乎全打烊 → no_places。
+  // 第二次一律要求「現在營業中」（Text Search 才有 openNow；Nearby 沒有）。
   if (first.kind === 'text') {
-    return { ...first, radius, rank: first.rank === 'DISTANCE' ? 'RELEVANCE' : 'DISTANCE' }
+    return { ...first, radius, rank: first.rank === 'DISTANCE' ? 'RELEVANCE' : 'DISTANCE', openNow: true }
   }
   const rank: NearbyRank = first.rank === 'POPULARITY' ? 'DISTANCE' : 'POPULARITY'
   const sweet = first.lane === SWEET_LANE.id || LANES.some((l) => l.id === first.lane && SWEET_GROUPS.has(l.group))
   const veg = first.lane === VEG_LANE.id
   const keep = !opts.forceRestaurant && (sweet || veg)
-  const lane = keep ? (sweet ? SWEET_LANE : VEG_LANE) : RESTAURANT_LANE
-  return { kind: 'nearby', lane: lane.id, includedTypes: lane.types, radius, rank }
+  if (keep) {
+    const lane = sweet ? SWEET_LANE : VEG_LANE
+    return { kind: 'nearby', lane: lane.id, includedTypes: lane.types, radius, rank }
+  }
+  // 一般餐廳的廣域後備：Text Search「餐廳／レストラン」＋ openNow，依距離。
+  return { kind: 'text', lane: 'text:open-now', textQuery: opts.country === 'JP' ? 'レストラン' : opts.country === 'other' ? 'restaurant' : '餐廳', radius, rank: 'DISTANCE', openNow: true }
 }

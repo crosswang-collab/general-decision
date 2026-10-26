@@ -254,3 +254,18 @@ describe('placesTypesFor（甜食改查甜點店）', () => {
     expect(placesTypesFor(['cafe'], { taste: '甜食' })).toEqual(['bakery', 'cafe', 'ice_cream_shop'])
   })
 })
+
+// 2026-10-26 正式站實測：查 restaurant 撈回「東京半島酒店」「旅店」。主類別是住宿的不派。
+import { describe as dL, expect as eL, it as iL } from 'vitest'
+import { toCandidates as tc } from '../../src/places.ts'
+dL('toCandidates：住宿類不當餐廳', () => {
+  iL('primaryType 是 hotel／lodging 的拿掉，餐廳留著', () => {
+    const open = { currentOpeningHours: { openNow: true }, location: { latitude: 25.04, longitude: 121.56 } }
+    const out = tc([
+      { id: 'h', displayName: { text: '東京半島酒店' }, primaryType: 'hotel', ...open },
+      { id: 'l', displayName: { text: '阿樹國際旅店' }, primaryType: 'lodging', ...open },
+      { id: 'r', displayName: { text: '芝香雞肉飯' }, primaryType: 'restaurant', ...open },
+    ], { lat: 25.04, lng: 121.56 }, new Date('2026-10-26T04:00:00Z'))
+    eL(out.map((c) => c.id)).toEqual(['r'])
+  })
+})

@@ -153,6 +153,12 @@ export function ratingScore(rating?: number, count?: number): number {
  * 照貝氏平均排序（除錯畫面好讀），**全部保留**：品質保底與挑店都移到 src/discovery.ts pickPlace（DEV-PLAN-3 W1.1）。
  * tz 是店家所在地的時區（src/tz.ts tzOf），營業到幾點／幾點開都用當地時間。
  */
+/** 主類別是住宿的店不當餐廳派（Places Table A 的 lodging 類）。 */
+export const LODGING_TYPES = new Set([
+  'lodging', 'hotel', 'resort_hotel', 'motel', 'hostel', 'inn', 'guest_house', 'bed_and_breakfast', 'extended_stay_hotel',
+  'japanese_inn', 'budget_japanese_inn', 'farmstay', 'cottage', 'private_guest_room', 'campground', 'camping_cabin', 'rv_park', 'mobile_home_park',
+])
+
 export function toCandidates(
   raw: RawPlace[],
   origin: { lat: number; lng: number },
@@ -163,6 +169,8 @@ export function toCandidates(
   const all = raw
     .filter((p) => p.id && p.displayName?.text)
     .filter((p) => !exclude.includes(p.id!))
+    // 正式站實測：查 restaurant 會撈回飯店（東京半島酒店、旅店），叫人「去吃飯店」不是口令。主類別是住宿的一律拿掉。
+    .filter((p) => !LODGING_TYPES.has(p.primaryType ?? ''))
     .filter((p) => {
       if (p.currentOpeningHours?.openNow === true) return true
       const m = minutesUntilOpen(p, now)

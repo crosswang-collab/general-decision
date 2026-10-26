@@ -1,7 +1,11 @@
 {
   "name": "報告班長 · 決斷連",
   "short_name": "決斷連",
-  "description": "按一顆鍵，班長給你一道不可拒絕的命令。",
+  "id": "/",
+  "lang": "zh-TW",
+  "dir": "ltr",
+  "description": "選擇困難？班長下令，立刻出發",
+  "categories": ["food", "lifestyle"],
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -1,6 +1,9 @@
 // 第 13.2 節 Happy ×7：每卡 home→intake→「是！班長」→cmd 出現 .meme .big 非空。
 import { expect, test } from '@playwright/test'
-import { mockOrder } from './fixtures.ts'
+import { mockOrder, prime } from './fixtures.ts'
+
+// Round 3：先設好同意旗標，免得被首次同意畫面擋住。
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 const CARDS = ['eat', 'go', 'attend', 'rest', 'sleep', 'reply', 'buy', 'travel'] as const
 

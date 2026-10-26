@@ -7,7 +7,7 @@ export const MOCK_ORDERS: Record<ModuleId, Order> = {
     verdict: 'do',
     meme: { top: '去吃熱的', big: '阿財魯肉飯', bot: '這週兩天超商了' },
     steps: ['步行 6 分鐘，營業到 21:00。', '魯肉飯、滷蛋、燙青菜。', '12 分鐘吃完，手機收起來。'],
-    place: { id: 'mock-eat-1', name: '阿財魯肉飯', walkMin: 6, openUntil: '21:00' },
+    place: { id: 'mock-eat-1', name: '阿財魯肉飯', walkMin: 6, openUntil: '21:00', mode: 'new', visits: 1, band: 2, priceText: '≈NT$150–400', country: 'TW' },
     log: '12:41 魯肉飯，12:58 完成。',
   },
   go: {
@@ -26,7 +26,7 @@ export const MOCK_ORDERS: Record<ModuleId, Order> = {
     verdict: 'do',
     meme: { top: '起來喝一杯', big: 'Fika Fika Café', bot: '20 分鐘，手機面朝下' },
     steps: ['步行 4 分鐘，營業中。', '一杯，不加糖。', '坐 20 分鐘，手機面朝下。'],
-    place: { id: 'mock-rest-1', name: 'Fika Fika Café', walkMin: 4 },
+    place: { id: 'mock-rest-1', name: 'Fika Fika Café', walkMin: 4, mode: 'revisit', visits: 3, band: null, country: 'TW' },
     log: '15:10 Fika Fika，15:34 回報。',
   },
   sleep: {
@@ -61,14 +61,14 @@ export const MOCK_REISSUE: Partial<Record<ModuleId, Order>> = {
     verdict: 'do',
     meme: { top: '店關了不是你的錯', big: '巷口牛肉麵', bot: '第二道口令一樣算' },
     steps: ['步行 3 分鐘，營業中。', '清燉，不加辣。'],
-    place: { id: 'mock-eat-2', name: '巷口牛肉麵', walkMin: 3 },
+    place: { id: 'mock-eat-2', name: '巷口牛肉麵', walkMin: 3, mode: 'wildcard', visits: 1, band: 2, priceText: '≈NT$150–400', country: 'TW' },
     log: '13:05 牛肉麵，13:22 完成。',
   },
   rest: {
     verdict: 'do',
     meme: { top: '換一家', big: '路上咖啡', bot: '一樣坐 20 分鐘' },
     steps: ['步行 5 分鐘，營業中。', '一杯，不加糖。', '坐 20 分鐘，手機面朝下。'],
-    place: { id: 'mock-rest-2', name: '路上咖啡', walkMin: 5 },
+    place: { id: 'mock-rest-2', name: '路上咖啡', walkMin: 5, mode: 'new', visits: 1, band: null, country: 'TW' },
     log: '15:40 路上咖啡，16:02 回報。',
   },
   go: {

@@ -46,22 +46,69 @@ export function MemeCard({
   )
 }
 
+/** 口令卡上的店家資訊列所需的欄位（Order['place'] 的子集）。 */
+export interface PlaceMetaInput {
+  name: string
+  mapUrl?: string
+  walkMin?: number
+  openUntil?: string
+  opensAt?: string
+  priceText?: string
+  /** Round 3：伺服器算的選店理由，畫成印章（B1：讓發掘被看見）。 */
+  mode?: 'new' | 'revisit' | 'wildcard'
+  visits?: number
+  exhausted?: boolean
+}
+
+/** 印章文字：新店說「新據點」、回訪數「第 N 次」、偵察抽到的說「偵察」。附近都去過就說「已全數占領」。 */
+export function modeStamp(p: Pick<PlaceMetaInput, 'mode' | 'visits' | 'exhausted'>): string | undefined {
+  if (p.exhausted) return '這區已全數占領'
+  if (p.mode === 'new') return '新據點'
+  if (p.mode === 'wildcard') return '偵察任務'
+  if (p.mode === 'revisit') return typeof p.visits === 'number' && p.visits > 1 ? `第 ${p.visits} 次` : '回防'
+  return undefined
+}
+
+/**
+ * T10：一行講完「幾分鐘走到、開到幾點、貴不貴」。每一項都來自 API 當次回傳值（T6），沒有的就不寫，不編。
+ * 價位沒資料一律寫「價位未知」，不用空白帶過。
+ */
+export function formatPlaceMeta(p: PlaceMetaInput): string {
+  const bits: string[] = []
+  if (typeof p.walkMin === 'number') bits.push(`步行 ${p.walkMin} 分`)
+  if (p.opensAt) bits.push(`${p.opensAt} 開`)
+  else if (p.openUntil) bits.push(`營業到 ${p.openUntil}`)
+  bits.push(p.priceText ?? '價位未知')
+  return bits.join(' · ')
+}
+
 /**
  * 步驟卡 — 第 9 節：梗圖卡下方白卡，▸ 前綴，無梗。
  * 階段 B：伺服器端比中真實店家時，店名本身就是 Google Maps 連結。
  * 掛在店名上、不另開一顆按鈕——多一顆按鈕就是第二個動作，跟「一個口令一個動作」衝突。
- * 沒有 mapUrl（Places 降級／比不中）就什麼都不畫，不會出現空連結。
+ * 沒有 mapUrl（Places 降級／比不中）就整個店家區（印章、店名、meta、歸屬）都不畫：
+ * 不會出現空連結，也不會把模型編的店名顯示出來（R2-01）。
+ * Round 3（T10、R3§3.3）：有店就在店名下一行補 place-meta，最後一行標「Google Maps」歸屬。
  */
-export function StepsCard({ steps, place }: { steps: string[]; place?: { name: string; mapUrl?: string } }) {
+export function StepsCard({ steps, place }: { steps: string[]; place?: PlaceMetaInput }) {
+  // R2-01：只有伺服器真的比中店（有 mapUrl）才畫店家區。沒有 mapUrl 的 place 可能是模型編的，不准流到畫面。
+  const real = place?.mapUrl ? place : undefined
+  const stamp = real ? modeStamp(real) : undefined
   return (
     <div className="steps" data-testid="steps">
-      {steps.map((s, i) => <p key={i}>{s}</p>)}
-      {place?.mapUrl && (
-        <p className="place">
-          <a href={place.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{place.name}</a>
-          <span aria-hidden="true"> ↗</span>
-        </p>
+      {real && (
+        // Team Lead 設計修訂：店家資訊放卡片最上面——「3 秒內知道往哪走」（T10），步驟是第二眼的事。
+        <div className="place-head">
+          {stamp && <span className="stamp" data-mode={real.exhausted ? 'exhausted' : real.mode} data-testid="mode-stamp">{stamp}</span>}
+          <p className="place">
+            <a href={real.mapUrl} target="_blank" rel="noopener noreferrer" data-testid="place-link">{real.name}</a>
+            <span aria-hidden="true"> ↗</span>
+          </p>
+          <p className="place-meta" data-testid="place-meta">{formatPlaceMeta(real)}</p>
+        </div>
       )}
+      {steps.map((s, i) => <p key={i}>{s}</p>)}
+      {real && <small className="attribution" translate="no" data-testid="attribution">Google Maps</small>}
     </div>
   )
 }

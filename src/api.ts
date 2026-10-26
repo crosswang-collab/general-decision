@@ -1,9 +1,10 @@
 // 呼叫 /api/order、/api/weekly；重試與錯誤分類（第 4、11 節）。
 import { DAILY_PLACES_CAP } from './places.ts'
 import { recordDebug } from './debug.ts'
-import type { Order, OrderDebug, OrderRequest, WeeklyReport } from './types.ts'
+import type { GeocodeResponse, Order, OrderDebug, OrderRequest, WeeklyReport, WeeklyRequest } from './types.ts'
 
-export type ApiErrorKind = 'offline' | 'rate_limited' | 'upstream' | 'bad_request' | 'no_location' | 'no_places'
+export type ApiErrorKind =
+  'offline' | 'rate_limited' | 'upstream' | 'bad_request' | 'no_location' | 'no_places' | 'not_found' | 'over_cap'
 
 export class ApiError extends Error {
   kind: ApiErrorKind
@@ -26,6 +27,10 @@ export const ERROR_TEXT: Record<ApiErrorKind, { line: string; sub?: string }> = 
   // 2026-09-18：吃／歇一定要點真店。沒定位、附近沒開著的店 → 直接說，不用類別糊過去。
   no_location: { line: '不報座標，班長就點不了店。開定位再報告。' },
   no_places: { line: '附近查不到營業中的店。換個地方再報告。' },
+  // Round 3 C2：手動報座標查不到。
+  not_found: { line: '找不到這個地方。報個車站或地標。' },
+  // 每日 Places 呼叫上限（含手動報座標換來的那一次）用完：不是沒定位，不能叫人去開定位。
+  over_cap: { line: '今天的偵察額度用完了。明天再報告。' },
 }
 
 export const GEO_DENIED_LINE = '不報座標？行，班長用常識。'
@@ -104,7 +109,7 @@ async function post<T>(path: string, body: unknown): Promise<{ data: T; res: Res
       debug = body.debug
     } catch { /* 沒 body 就看狀態碼 */ }
     const kind: ApiErrorKind =
-      code === 'no_location' || code === 'no_places' ? code
+      code === 'no_location' || code === 'no_places' || code === 'not_found' ? code
       : res.status === 429 ? 'rate_limited' : res.status === 400 ? 'bad_request' : 'upstream'
     throw new ApiError(kind, ERROR_TEXT[kind].line, debug)
   }
@@ -134,11 +139,15 @@ export async function requestOrder(req: OrderRequest): Promise<Order> {
   }
 }
 
-export async function requestWeekly(body: {
-  weekStart: string
-  level: number
-  entries: unknown[]
-}): Promise<WeeklyReport> {
+export async function requestWeekly(body: WeeklyRequest): Promise<WeeklyReport> {
   const { data } = await post<WeeklyReport>('/api/weekly', body)
+  return data
+}
+
+/** C2：沒有定位時手動報地點。伺服器用 Text Search 換座標，不落地；前端也不存。 */
+export async function requestGeocode(q: string): Promise<GeocodeResponse> {
+  const { data, res } = await post<GeocodeResponse>('/api/geocode', { q })
+  // geocode 也是一次 Places 呼叫（Text Search），一樣計入每日上限。
+  addPlacesCalls(Number(res.headers.get('x-places-calls') ?? 0))
   return data
 }

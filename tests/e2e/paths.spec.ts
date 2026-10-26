@@ -1,6 +1,8 @@
 // 第 13.2 節 三路：完成→log 頁；店關了→big 改變且 reissue 鍵消失；沒做→stand 倒數至 0 回 home。
 import { expect, test } from '@playwright/test'
-import { FIXED_ORDER, SECOND_ORDER, mockOrder } from './fixtures.ts'
+import { FIXED_ORDER, SECOND_ORDER, mockOrder, prime } from './fixtures.ts'
+
+test.beforeEach(async ({ page }) => { await prime(page) })
 
 test.use({ geolocation: { latitude: 25.033, longitude: 121.5654 }, permissions: ['geolocation'] })
 
@@ -26,9 +28,11 @@ test('店關了 → big 改變，且換口令鍵消失（一次只能換一次�
   await mockOrder(page, [FIXED_ORDER, SECOND_ORDER])
   await toCmd(page)
   await expect(page.getByTestId('meme-big')).toHaveText('阿財魯肉飯')
-  await expect(page.getByTestId('reissue')).toHaveText('店關了')
+  await expect(page.getByTestId('reissue')).toHaveText('換一家')
 
+  // Round 3：換一家先問原因（底部選單），選了才換。
   await page.getByTestId('reissue').click()
+  await page.getByTestId('reason-closed').click()
   await expect(page.getByTestId('meme-big')).toHaveText('巷口牛肉麵')
   await expect(page.getByTestId('reissue')).toHaveCount(0)
 })
@@ -43,6 +47,7 @@ test('換口令會把上一家放進 exclude', async ({ page }) => {
   })
   await toCmd(page)
   await page.getByTestId('reissue').click()
+  await page.getByTestId('reason-closed').click()
   await expect(page.getByTestId('meme-big')).toHaveText('巷口牛肉麵')
   expect(sent[0]?.exclude).toBeUndefined()
   expect(sent[1]?.exclude).toEqual(['p1'])

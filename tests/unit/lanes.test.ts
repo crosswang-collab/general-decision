@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_BY_ID } from '../../src/cards.ts'
 import { mulberry32 } from '../../src/discovery.ts'
-import { LANES, RESTAURANT_LANE, mealLanes, pickLane, widenPlan, type LanePlan } from '../../src/lanes.ts'
+import { LANES, mealLanes, pickLane, widenPlan, type LanePlan } from '../../src/lanes.ts'
 
 const many = (n: number, f: (seed: number) => LanePlan) => Array.from({ length: n }, (_, s) => f(s + 1))
 
@@ -81,19 +81,21 @@ describe('pickLane', () => {
 })
 
 describe('widenPlan（第二次呼叫）', () => {
-  it('Nearby：退回 restaurant、半徑 ×2.5、換 rankPreference', () => {
-    const w = widenPlan({ kind: 'nearby', lane: 'ramen_restaurant', includedTypes: ['ramen_restaurant'], radius: 800, rank: 'POPULARITY' })
-    expect(w).toEqual({ kind: 'nearby', lane: RESTAURANT_LANE.id, includedTypes: ['restaurant'], radius: 2000, rank: 'DISTANCE' })
+  // 2026-10-26 正式站實測後改：深夜 Nearby 熱門排序撈回的店幾乎全打烊 → 第二次一律 Text Search + openNow。
+  it('Nearby 一般 lane：改 Text Search「餐廳」＋ openNow、半徑 ×2.5、依距離；日本用「レストラン」', () => {
+    const first: LanePlan = { kind: 'nearby', lane: 'ramen_restaurant', includedTypes: ['ramen_restaurant'], radius: 800, rank: 'POPULARITY' }
+    expect(widenPlan(first)).toEqual({ kind: 'text', lane: 'text:open-now', textQuery: '餐廳', radius: 2000, rank: 'DISTANCE', openNow: true })
+    expect(widenPlan(first, { country: 'JP' })).toMatchObject({ kind: 'text', textQuery: 'レストラン', openNow: true })
   })
-  it('甜食／素食保留自己的 type；400 時一律退回 restaurant', () => {
+  it('甜食／素食保留自己的 type；400 時一律退回營業中的餐廳 Text Search', () => {
     const veg = pickLane(CARD_BY_ID.eat, { diet: '素' }, undefined, 'TW', mulberry32(1))
-    expect(widenPlan(veg).kind === 'nearby' && (widenPlan(veg) as { includedTypes: string[] }).includedTypes).toEqual(['vegetarian_restaurant', 'vegan_restaurant'])
-    expect((widenPlan(veg, { forceRestaurant: true }) as { includedTypes: string[] }).includedTypes).toEqual(['restaurant'])
+    expect((widenPlan(veg) as { includedTypes: string[] }).includedTypes).toEqual(['vegetarian_restaurant', 'vegan_restaurant'])
+    expect(widenPlan(veg, { forceRestaurant: true })).toMatchObject({ kind: 'text', textQuery: '餐廳', openNow: true })
     const sweet = pickLane(CARD_BY_ID.eat, { taste: '甜食' }, undefined, 'TW', mulberry32(1))
     expect((widenPlan(sweet) as { includedTypes: string[] }).includedTypes).toEqual(['bakery', 'cafe', 'ice_cream_shop'])
   })
-  it('Text Search：同關鍵字、半徑 ×2.5、換 rankPreference', () => {
+  it('Text Search：同關鍵字、半徑 ×2.5、換 rankPreference、只要營業中', () => {
     expect(widenPlan({ kind: 'text', lane: 'text:咖啡廳', textQuery: '咖啡廳', radius: 800, rank: 'DISTANCE' }))
-      .toEqual({ kind: 'text', lane: 'text:咖啡廳', textQuery: '咖啡廳', radius: 2000, rank: 'RELEVANCE' })
+      .toEqual({ kind: 'text', lane: 'text:咖啡廳', textQuery: '咖啡廳', radius: 2000, rank: 'RELEVANCE', openNow: true })
   })
 })

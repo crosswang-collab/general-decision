@@ -124,7 +124,7 @@ describe('/api/order handler（第 12 節 S5）', () => {
     expect(f).not.toHaveBeenCalled()
   })
 
-  it('lane 有效候選 < 5 → 第二次 restaurant＋半徑 2000，第二次有就用', async () => {
+  it('lane 有效候選 < 5 → 第二次 Text Search「餐廳」＋ openNow、半徑 2000，第二次有就用', async () => {
     const bodies: string[] = []
     const places = vi.fn((init?: RequestInit) => {
       bodies.push(String(init?.body ?? ''))
@@ -138,9 +138,11 @@ describe('/api/order handler（第 12 節 S5）', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('x-places-calls')).toBe('2')
     expect(JSON.parse(bodies[0]!).locationRestriction.circle.radius).toBe(800)
-    expect(JSON.parse(bodies[1]!).locationRestriction.circle.radius).toBe(2000)
-    expect(JSON.parse(bodies[1]!).includedTypes).toEqual(['restaurant'])
-    expect(JSON.parse(bodies[1]!).rankPreference).not.toBe(JSON.parse(bodies[0]!).rankPreference)
+    const second = JSON.parse(bodies[1]!)
+    expect(second.locationBias.circle.radius).toBe(2000)
+    expect(second.textQuery).toBe('餐廳')
+    expect(second.openNow).toBe(true)
+    expect(second.rankPreference).toBe('DISTANCE')
   })
 
   it('模型只講類別 → 不重打，place 被 pickPlace 的結果覆寫，dbg.forced 有值', async () => {
@@ -409,7 +411,7 @@ describe('Round 3：禁詞、價位、國家（B8、B7、T9）', () => {
 describe('Round 3：Places 呼叫規則', () => {
   beforeEach(() => { vi.spyOn(console, 'info').mockImplementation(() => {}); vi.spyOn(console, 'warn').mockImplementation(() => {}) })
 
-  it('lane 回 400 → 第二次自動退回 restaurant（算在 2 次裡）', async () => {
+  it('lane 回 400 → 第二次自動退回營業中的餐廳 Text Search（算在 2 次裡）', async () => {
     const bodies: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       if (String(url).includes('anthropic')) return claudeOk(ORDER_JSON)
@@ -419,7 +421,7 @@ describe('Round 3：Places 呼叫規則', () => {
     const res = await handler(post({ seed: 3 }))
     expect(res.status).toBe(200)
     expect(res.headers.get('x-places-calls')).toBe('2')
-    expect(JSON.parse(bodies[1]!).includedTypes).toEqual(['restaurant'])
+    expect(JSON.parse(bodies[1]!)).toMatchObject({ textQuery: '餐廳', openNow: true })
   })
 
   it('甜食走甜食 lane、素走素食 lane；第二次也不退回 restaurant', async () => {

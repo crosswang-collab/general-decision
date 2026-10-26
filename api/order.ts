@@ -181,7 +181,7 @@ async function handler(request: Request): Promise<Response> {
         console.warn(`[places] fail ${how} r=${plan.radius}：${(e as Error).message}`)
       }
       // 第二次：有效候選 < 5（或第一次失敗）→ 半徑 ×2.5、換 rankPreference；lane 回 400 → 退回 restaurant。
-      plan = call === 0 && cands.length < MIN_VALID ? widenPlan(first, { forceRestaurant: firstStatus === 400 }) : null
+      plan = call === 0 && cands.length < MIN_VALID ? widenPlan(first, { forceRestaurant: firstStatus === 400, country }) : null
     }
     placesMs = Date.now() - t0
     country = cands.map((c) => currencyCountry(c.priceRange?.currency)).find(Boolean) ?? country
@@ -374,7 +374,7 @@ async function fetchPlaces(loc: { lat: number; lng: number }, plan: LanePlan): P
   // 不在這裡用 openNow 過濾：「60 分內開門」的店也要留，篩選在 toCandidates()。
   const body = JSON.stringify(
     plan.kind === 'text'
-      ? { textQuery: plan.textQuery, pageSize: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationBias: { circle } }
+      ? { textQuery: plan.textQuery, pageSize: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationBias: { circle }, ...(plan.openNow ? { openNow: true } : {}) }
       : { includedTypes: plan.includedTypes, maxResultCount: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationRestriction: { circle } },
   )
   let res: Response

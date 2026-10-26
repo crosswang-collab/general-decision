@@ -79,7 +79,9 @@ function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): st
     '你只負責寫口令：meme.big 就是這家店名（≤10 字，太長用店家慣稱）。',
     modeRule,
     pick.exhausted ? '附近能偵察的新店都偵察完了，這次派的是已知據點。' : '',
-    over ? '這家超出使用者選的預算一檔：在 meme.bot 講「超出預算一檔，我准了」。' : '',
+    over && priceFit(band, req.budget) > 0 ? '這家超出使用者選的預算一檔：在 meme.bot 講「超出預算一檔，我准了」。' : '',
+    // 正式站實測：深夜預算內的店都打烊，抽到差兩檔以上的店卻不吭聲。要講清楚，不准裝沒事。
+    over && priceFit(band, req.budget) === 0 ? '附近預算內的店這個時間都沒開，這家比使用者選的預算貴：在 meme.bot 直說「預算內的都關了，這家比較貴」。' : '',
     '禁止提到任何別家店或類別；禁止寫出「價位」以外的金額；禁止寫連結。',
     // Team Lead 設計修訂：口令卡最上面已經印了店名、步行、營業、價位，steps 再講一次就是廢話。
     '口令卡上已經印好店名、步行分鐘、營業時間、價位：steps 不要重複這些，只寫點什麼、怎麼吃、幾分鐘內吃完這類動作（「HH:MM 開」的店例外，要講幾點到）。',

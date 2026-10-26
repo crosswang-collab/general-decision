@@ -99,3 +99,21 @@ describe('widenPlan（第二次呼叫）', () => {
       .toEqual({ kind: 'text', lane: 'text:咖啡廳', textQuery: '咖啡廳', radius: 2000, rank: 'RELEVANCE', openNow: true })
   })
 })
+
+import { budgetLine } from '../../src/prompt.ts'
+describe('budgetLine：店跟預算對不上時，方向要講對（PR #22 紅隊）', () => {
+  it('對得上、沒選預算、價位未知 → 不講', () => {
+    expect(budgetLine(1, [1])).toBe('')
+    expect(budgetLine(3, undefined)).toBe('')
+    expect(budgetLine(null, [1])).toBe('')
+  })
+  it('貴一檔 → 我准了；貴兩檔以上 → 預算內的沒開，比較貴', () => {
+    expect(budgetLine(2, [1])).toContain('超出預算一檔')
+    expect(budgetLine(3, [1])).toContain('比較貴')
+  })
+  it('便宜 → 講便宜，不准講貴（選 1,000+ 被派到 ≤150）', () => {
+    expect(budgetLine(1, [4])).toContain('比較便宜')
+    expect(budgetLine(1, [4])).not.toContain('貴')
+    expect(budgetLine(3, [4])).toContain('省一點')
+  })
+})

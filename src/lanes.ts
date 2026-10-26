@@ -151,8 +151,9 @@ export function pickLane(
 /**
  * 第二次呼叫（有效候選 < 5，或第一次失敗）：半徑 ×2.5、換另一種 rankPreference。
  * - Text Search：同一個關鍵字。
- * - Nearby：退回 `restaurant`；甜食／素食保留自己的 type（不然會派甜食的人去吃牛排）。
- * - forceRestaurant：第一次回 400（lane 的 type 不被接受）→ 一律退回 restaurant。
+ * - Nearby 一般 lane：改 Text Search「餐廳／レストラン／restaurant」＋ openNow、依距離（深夜也查得到營業中的店）。
+ *   甜食／素食保留自己的 type（不然會派甜食的人去吃牛排）。
+ * - forceRestaurant：第一次回 400（lane 的 type 不被接受）→ 一律退回營業中的餐廳 Text Search。
  */
 export function widenPlan(first: LanePlan, opts: { forceRestaurant?: boolean; country?: Country } = {}): LanePlan {
   const radius = Math.round(first.radius * WIDEN_FACTOR)
@@ -170,5 +171,5 @@ export function widenPlan(first: LanePlan, opts: { forceRestaurant?: boolean; co
     return { kind: 'nearby', lane: lane.id, includedTypes: lane.types, radius, rank }
   }
   // 一般餐廳的廣域後備：Text Search「餐廳／レストラン」＋ openNow，依距離。
-  return { kind: 'text', lane: 'text:open-now', textQuery: opts.country === 'JP' ? 'レストラン' : '餐廳', radius, rank: 'DISTANCE', openNow: true }
+  return { kind: 'text', lane: 'text:open-now', textQuery: opts.country === 'JP' ? 'レストラン' : opts.country === 'other' ? 'restaurant' : '餐廳', radius, rank: 'DISTANCE', openNow: true }
 }

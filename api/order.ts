@@ -180,7 +180,7 @@ async function handler(request: Request): Promise<Response> {
         tries.push({ r: plan.radius, raw: -1, kept: 0 }) // raw=-1：這一次整個查失敗
         console.warn(`[places] fail ${how} r=${plan.radius}：${(e as Error).message}`)
       }
-      // 第二次：有效候選 < 5（或第一次失敗）→ 半徑 ×2.5、換 rankPreference；lane 回 400 → 退回 restaurant。
+      // 第二次：有效候選 < 5（或第一次失敗）→ 半徑 ×2.5、只要營業中（Text Search openNow）；lane 回 400 → 退回營業中的餐廳。
       plan = call === 0 && cands.length < MIN_VALID ? widenPlan(first, { forceRestaurant: firstStatus === 400, country }) : null
     }
     placesMs = Date.now() - t0
@@ -371,7 +371,7 @@ async function fetchPlaces(loc: { lat: number; lng: number }, plan: LanePlan): P
   if (!key) throw new Error('GOOGLE_PLACES_KEY 未設定')
 
   const circle = { center: { latitude: loc.lat, longitude: loc.lng }, radius: plan.radius }
-  // 不在這裡用 openNow 過濾：「60 分內開門」的店也要留，篩選在 toCandidates()。
+  // 第一次不用 openNow：「60 分內開門」的店也要留（篩選在 toCandidates）；第二次（widenPlan）才要求營業中。
   const body = JSON.stringify(
     plan.kind === 'text'
       ? { textQuery: plan.textQuery, pageSize: FETCH_COUNT, rankPreference: plan.rank, languageCode: 'zh-TW', locationBias: { circle }, ...(plan.openNow ? { openNow: true } : {}) }

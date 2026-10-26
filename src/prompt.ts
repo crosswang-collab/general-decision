@@ -3,7 +3,7 @@ import { OFFICER_BY_LEVEL, sampleCorpus } from './officers.ts'
 import { CARD_BY_ID } from './cards.ts'
 import { attendVerdict, buyVerdict, lightsOut } from './rules.ts'
 import { bandOf, priceFit, priceText } from './price.ts'
-import type { Country, Level, ModuleId, OrderRequest, PickResult } from './types.ts'
+import type { Band, Country, Level, ModuleId, OrderRequest, PickResult } from './types.ts'
 
 // Round 3：PlaceCandidate 搬到 types.ts（DEV-PLAN-3 §B.1），這裡轉出口讓既有 import 不用動。
 export type { PlaceCandidate } from './types.ts'
@@ -61,6 +61,18 @@ export function buildOrderPrompt(req: OrderRequest, pick: PickResult | null, cou
   return { system, user }
 }
 
+/**
+ * 店跟預算對不上時要講清楚，方向也要對（PR #22 紅隊）：比預算貴才講「貴」，比預算便宜就講「便宜」。
+ * 差一檔 → 准了；差兩檔以上 → 附近預算內的沒得挑（深夜打烊最常見）。對得上或沒資料 → 不講。
+ */
+export function budgetLine(band: number | null, budget: Band[] | undefined): string {
+  if (!budget?.length || band === null || priceFit(band, budget) === 1) return ''
+  const pricier = Math.floor(band) > Math.max(...budget)
+  const near = priceFit(band, budget) > 0
+  if (pricier) return near ? '這家超出使用者選的預算一檔：在 meme.bot 講「超出預算一檔，我准了」。' : '附近預算內的店現在沒得挑，這家比使用者選的預算貴：在 meme.bot 直說「預算內的沒開，這家比較貴」。'
+  return near ? '這家比使用者選的預算便宜一檔：在 meme.bot 講「比預算省一點，我准了」。' : '附近預算內的店現在沒得挑，這家比使用者選的預算便宜：在 meme.bot 直說「預算內的沒開，這家比較便宜」。'
+}
+
 /** 附錄 2 的【店已決定】段落。數字（步行、營業、價位、第 N 次）全部是伺服器算好的，模型照講不准改（T6）。 */
 function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): string {
   const p = pick.place
@@ -71,7 +83,6 @@ function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): st
       : pick.mode === 'revisit' ? `mode=revisit：在 meme.top 或 meme.bot 講「第 ${pick.visits} 次」，數字照抄。`
         : 'mode=wildcard：在 meme.top 或 meme.bot 講這是偵察任務。'
   const band = bandOf(p, country)
-  const over = req.budget?.length && band !== null && priceFit(band, req.budget) < 1
   return [
     // R3 修正 S-9：不送 place.id——模型用不到，id 由 withPlace 填（資料最小化，跟不送座標同一個理由）。
     `【店已決定】place.name=${p.name}　${p.walkMin ? `步行 ${p.walkMin} 分　` : ''}${hours}　價位：${price}`,
@@ -79,9 +90,7 @@ function decidedBlock(req: OrderRequest, pick: PickResult, country: Country): st
     '你只負責寫口令：meme.big 就是這家店名（≤10 字，太長用店家慣稱）。',
     modeRule,
     pick.exhausted ? '附近能偵察的新店都偵察完了，這次派的是已知據點。' : '',
-    over && priceFit(band, req.budget) > 0 ? '這家超出使用者選的預算一檔：在 meme.bot 講「超出預算一檔，我准了」。' : '',
-    // 正式站實測：深夜預算內的店都打烊，抽到差兩檔以上的店卻不吭聲。要講清楚，不准裝沒事。
-    over && priceFit(band, req.budget) === 0 ? '附近預算內的店這個時間都沒開，這家比使用者選的預算貴：在 meme.bot 直說「預算內的都關了，這家比較貴」。' : '',
+    budgetLine(band, req.budget),
     '禁止提到任何別家店或類別；禁止寫出「價位」以外的金額；禁止寫連結。',
     // Team Lead 設計修訂：口令卡最上面已經印了店名、步行、營業、價位，steps 再講一次就是廢話。
     '口令卡上已經印好店名、步行分鐘、營業時間、價位：steps 不要重複這些，只寫點什麼、怎麼吃、幾分鐘內吃完這類動作（「HH:MM 開」的店例外，要講幾點到）。',
